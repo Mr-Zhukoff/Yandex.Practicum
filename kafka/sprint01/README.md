@@ -1,7 +1,4 @@
-# Yandex.Practicum
-Обучение в Яндекс.Практикум
-
-## Kafka
+# Kafka sprint 1
 Запускаем Docker Compose, чтобы создать и запустить контейнеры:
 
 `docker-compose up -d` 
