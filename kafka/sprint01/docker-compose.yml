@@ -61,4 +61,20 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: Local Kafka Cluster
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      KAFKA_TOPIC: my-topic
       DYNAMIC_CONFIG_ENABLED: true
+
+  kafka-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_BROKERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      KAFKA_TOPIC: my-topic
+    depends_on:
+      - kafka-1
+      - kafka-2
+      - kafka-3
+    deploy:
+      replicas: 1
+    restart: on-failure
