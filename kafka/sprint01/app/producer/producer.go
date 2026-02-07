@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"kafka-app/model"
+
 	"github.com/segmentio/kafka-go"
 )
 
@@ -54,18 +56,31 @@ func (p *Producer) Start(ctx context.Context) {
 		}
 
 		msgNum++
-		value := fmt.Sprintf("Message #%d at %s", msgNum, time.Now().Format(time.RFC3339))
+		content := fmt.Sprintf("Message #%d at %s", msgNum, time.Now().Format(time.RFC3339))
 		key := fmt.Sprintf("key-%d", msgNum)
 
-		err := p.writer.WriteMessages(ctx, kafka.Message{
+		// Create a structured message
+		msg := model.NewMessage(msgNum, content, "producer")
+
+		// Serialize message to JSON
+		jsonData, err := msg.ToJSON()
+		if err != nil {
+			log.Printf("[Producer] ERROR serializing message: %v", err)
+			continue
+		}
+
+		// Log the JSON message being sent
+		log.Printf("[Producer] Sending JSON message: %s", string(jsonData))
+
+		err = p.writer.WriteMessages(ctx, kafka.Message{
 			Key:   []byte(key),
-			Value: []byte(value),
+			Value: jsonData,
 		})
 
 		if err != nil {
 			log.Printf("[Producer] ERROR sending message: %v", err)
 		} else {
-			log.Printf("[Producer] Sent: %s", value)
+			log.Printf("[Producer] Sent message with key=%s, id=%d, content=%s", key, msg.ID, msg.Content)
 		}
 
 		time.Sleep(500 * time.Millisecond)

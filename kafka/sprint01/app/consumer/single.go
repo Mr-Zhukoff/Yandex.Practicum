@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"kafka-app/model"
+
 	"github.com/segmentio/kafka-go"
 )
 
@@ -55,12 +57,31 @@ func (s *SingleMessageConsumer) Start(ctx context.Context) {
 			continue
 		}
 
-		log.Printf("[SingleMessageConsumer] Received: topic=%s partition=%d offset=%d key=%s value=%s",
+		// Log raw JSON received
+		log.Printf("[SingleMessageConsumer] Received raw JSON: %s", string(msg.Value))
+
+		// Deserialize JSON message
+		message, err := model.FromJSON(msg.Value)
+		if err != nil {
+			log.Printf("[SingleMessageConsumer] ERROR deserializing message: %v", err)
+			log.Printf("[SingleMessageConsumer] Raw data: topic=%s partition=%d offset=%d key=%s",
+				msg.Topic,
+				msg.Partition,
+				msg.Offset,
+				string(msg.Key))
+			continue
+		}
+
+		// Log deserialized message
+		log.Printf("[SingleMessageConsumer] Deserialized message: topic=%s partition=%d offset=%d key=%s | ID=%d Content=%s Timestamp=%s Source=%s",
 			msg.Topic,
 			msg.Partition,
 			msg.Offset,
 			string(msg.Key),
-			string(msg.Value))
+			message.ID,
+			message.Content,
+			message.Timestamp.Format("2006-01-02 15:04:05"),
+			message.Source)
 	}
 }
 

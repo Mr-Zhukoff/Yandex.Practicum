@@ -5,6 +5,8 @@ import (
 	"log"
 	"time"
 
+	"kafka-app/model"
+
 	"github.com/segmentio/kafka-go"
 )
 
@@ -74,13 +76,34 @@ func (b *BatchMessageConsumer) Start(ctx context.Context) {
 
 		// Process the batch
 		for i, msg := range batch {
-			log.Printf("[BatchMessageConsumer] Batch message [%d/%d]: topic=%s partition=%d offset=%d key=%s value=%s",
+			// Log raw JSON received
+			log.Printf("[BatchMessageConsumer] Batch message [%d/%d] raw JSON: %s",
+				i+1, len(batch), string(msg.Value))
+
+			// Deserialize JSON message
+			message, err := model.FromJSON(msg.Value)
+			if err != nil {
+				log.Printf("[BatchMessageConsumer] ERROR deserializing batch message [%d/%d]: %v",
+					i+1, len(batch), err)
+				log.Printf("[BatchMessageConsumer] Raw data: topic=%s partition=%d offset=%d key=%s",
+					msg.Topic,
+					msg.Partition,
+					msg.Offset,
+					string(msg.Key))
+				continue
+			}
+
+			// Log deserialized message
+			log.Printf("[BatchMessageConsumer] Batch message [%d/%d] deserialized: topic=%s partition=%d offset=%d key=%s | ID=%d Content=%s Timestamp=%s Source=%s",
 				i+1, len(batch),
 				msg.Topic,
 				msg.Partition,
 				msg.Offset,
 				string(msg.Key),
-				string(msg.Value))
+				message.ID,
+				message.Content,
+				message.Timestamp.Format("2006-01-02 15:04:05"),
+				message.Source)
 		}
 
 		// Commit offsets once after processing the entire batch
