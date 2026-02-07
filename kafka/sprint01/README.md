@@ -7,8 +7,23 @@
 
 `docker ps` 
 
-Вы должны увидеть два работающих контейнера: один для Zookeeper и один для Kafka
-Для взаимодействия с Kafka можно использовать команды внутри контейнера Kafka. Подключитесь к контейнеру:
+Вы должны увидеть пять работающих контейнеров:
+ - 1 для Zookeeper 
+ - 3 для Kafka
+ - 1 для Kafka-UI
 
-`docker exec -it <container_id_kafka> /bin/sh`
+Для создания топика топик с 3 партициями и 2 репликами выполните следующую команду
+
+```
+docker exec sprint01-kafka-1-1 kafka-topics --create \
+  --topic my-topic \
+  --partitions 3 \
+  --replication-factor 2 \
+  --bootstrap-server kafka-1:29092
+```
+
+Проверить можно командой describe
+
+`docker exec sprint01-kafka-1-1 kafka-topics --describe --topic my-topic --bootstrap-server kafka-1:29092
+`
 
