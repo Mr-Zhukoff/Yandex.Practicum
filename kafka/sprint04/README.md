@@ -57,6 +57,18 @@ Stop and remove volumes (clean reset):
 docker compose down -v
 ```
 
+Create topic `mytopics` directly via Docker Compose:
+
+```bash
+docker compose exec kafka-0 kafka-topics.sh --bootstrap-server kafka-0:9092 --create --if-not-exists --topic mytopics --partitions 3 --replication-factor 3
+```
+
+List topics:
+
+```bash
+docker compose exec kafka-0 kafka-topics.sh --bootstrap-server kafka-0:9092 --list
+```
+
 ## Service endpoints
 
 - Kafka UI: <http://127.0.0.1:8080>
