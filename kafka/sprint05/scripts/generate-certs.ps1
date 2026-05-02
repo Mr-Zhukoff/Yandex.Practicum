@@ -48,7 +48,7 @@ function New-BrokerCert {
 
     $extFile = "$Name.ext"
     @"
-subjectAltName=DNS:$Name
+subjectAltName=DNS:$Name,DNS:localhost,IP:127.0.0.1
 extendedKeyUsage=serverAuth,clientAuth
 "@ | Set-Content -Path $extFile -Encoding ascii
 
@@ -80,8 +80,8 @@ function New-ClientCert {
     Invoke-Keytool -keystore "$Name.truststore.jks" -alias CARoot -import -file ca.cert.pem -storepass $storePass -noprompt
 
     Invoke-Keytool -importkeystore -srckeystore "$Name.keystore.jks" -srcstorepass $storePass -destkeystore "$Name.p12" -deststoretype PKCS12 -deststorepass $storePass -noprompt
-    openssl pkcs12 -in "$Name.p12" -passin pass:$storePass -nodes -nocerts | Out-File "$Name.key.pem" -Encoding ascii
-    Invoke-Keytool -exportcert -rfc -keystore "$Name.keystore.jks" -alias $Name -storepass $storePass > "$Name.cert.pem"
+    openssl pkcs12 -in "$Name.p12" -passin pass:$storePass -nodes -nocerts -out "$Name.key.pem"
+    openssl x509 -in "$Name-signed.crt" -out "$Name.cert.pem" -outform PEM
 
     Copy-Item "$Name.keystore.jks" (Join-Path $clientsDir "$Name.keystore.jks") -Force
     Copy-Item "$Name.truststore.jks" (Join-Path $clientsDir "$Name.truststore.jks") -Force
