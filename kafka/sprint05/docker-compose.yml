@@ -11,13 +11,15 @@ services:
     image: confluentinc/cp-kafka:7.4.13
     depends_on:
       - zookeeper
+    volumes:
+      - ./kafka/config/kafka-1.properties:/etc/kafka/kafka.properties
+      - ./certs:/etc/kafka/secrets
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_FILE: /etc/kafka/kafka.properties
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    command: ["bash", "-c", "kafka-server-start /etc/kafka/kafka.properties"]
     ports:
       - "9092:9092"
 
@@ -25,13 +27,15 @@ services:
     image: confluentinc/cp-kafka:7.4.13
     depends_on:
       - zookeeper
+    volumes:
+      - ./kafka/config/kafka-2.properties:/etc/kafka/kafka.properties
+      - ./certs:/etc/kafka/secrets
     environment:
       KAFKA_BROKER_ID: 2
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092,PLAINTEXT_HOST://localhost:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_FILE: /etc/kafka/kafka.properties
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    command: ["bash", "-c", "kafka-server-start /etc/kafka/kafka.properties"]
     ports:
       - "9093:9092"
 
@@ -39,13 +43,15 @@ services:
     image: confluentinc/cp-kafka:7.4.13
     depends_on:
       - zookeeper
+    volumes:
+      - ./kafka/config/kafka-3.properties:/etc/kafka/kafka.properties
+      - ./certs:/etc/kafka/secrets
     environment:
       KAFKA_BROKER_ID: 3
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092,PLAINTEXT_HOST://localhost:9094
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_FILE: /etc/kafka/kafka.properties
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    command: ["bash", "-c", "kafka-server-start /etc/kafka/kafka.properties"]
     ports:
       - "9094:9092"
 
@@ -60,6 +66,14 @@ services:
       - kafka-3
     environment:
       KAFKA_CLUSTERS_0_NAME: Local Kafka Cluster
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SSL
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/clients/admin.truststore.jks
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_PASSWORD: changeit
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/clients/admin.keystore.jks
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEYSTORE_PASSWORD: changeit
+      KAFKA_CLUSTERS_0_PROPERTIES_SSL_KEY_PASSWORD: changeit
       KAFKA_TOPIC: my-topic
       DYNAMIC_CONFIG_ENABLED: true
+    volumes:
+      - ./certs:/etc/kafka/secrets
