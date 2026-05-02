@@ -1,0 +1,21 @@
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd/producer ./cmd/producer
+RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/producer ./cmd/producer
+
+FROM alpine:3.20
+WORKDIR /app
+RUN apk add --no-cache ca-certificates
+
+COPY --from=builder /bin/producer /usr/local/bin/producer
+COPY certs /app/certs
+
+ENV CERTS_DIR=/app/certs
+ENV KAFKA_BROKERS=kafka-1:9092,kafka-2:9092,kafka-3:9092
+
+ENTRYPOINT ["/usr/local/bin/producer"]
+
