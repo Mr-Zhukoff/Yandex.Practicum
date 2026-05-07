@@ -1,0 +1,4 @@
+{"event_id":"evt-1","event_type":"login","user_id":"u-100","event_ts":1778008890125,"source":"web"}
+{"event_id":"evt-2","event_type":"view_product","user_id":"u-101","event_ts":1778008890125,"source":"mobile"}
+{"event_id":"evt-3","event_type":"checkout","user_id":"u-102","event_ts":1778008890125,"source":"web"}
+Processed a total of 3 messages

@@ -1,0 +1,3 @@
+producer: sent event_id=evt-1 key=u-100 value={"event_id":"evt-1","event_type":"login","user_id":"u-100","event_ts":1778008890125,"source":"web"}
+producer: sent event_id=evt-2 key=u-101 value={"event_id":"evt-2","event_type":"view_product","user_id":"u-101","event_ts":1778008890125,"source":"mobile"}
+producer: sent event_id=evt-3 key=u-102 value={"event_id":"evt-3","event_type":"checkout","user_id":"u-102","event_ts":1778008890125,"source":"web"}
