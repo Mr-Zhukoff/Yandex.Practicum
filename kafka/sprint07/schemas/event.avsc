@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "UserEvent",
+  "namespace": "ru.practicum.kafka",
+  "fields": [
+    { "name": "event_id", "type": "string" },
+    { "name": "event_type", "type": "string" },
+    { "name": "user_id", "type": "string" },
+    { "name": "event_ts", "type": "long" },
+    { "name": "source", "type": "string" }
+  ]
+}
