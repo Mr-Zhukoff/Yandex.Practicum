@@ -19,9 +19,19 @@
 Для каждого Kafka-брокера:
 
 - CPU: 4 vCPU (минимум 2)
-- RAM: 8–16 GB (heap обычно 4–8 GB)
+- RAM: 64 GB 
 - Disk: SSD/NVMe, от 100 GB, отдельный диск/том под логи Kafka
 - Файловая система: XFS/ext4, `noatime`
+
+ZooKeeper столько же нод сколько у кластера
+- CPU: 2-4 vCPU 
+- RAM: 4 GB 
+- Disk: SSD/NVMe, от 512 GB
+
+Schema Registry 
+- CPU: 2-4 vCPU 
+- RAM: 2 GB 
+- Disk: SSD/NVMe, 128 GB
 
 ## 3. Создание пользователя через Yandex Cloud (CLI)
 
@@ -58,6 +68,8 @@ curl -s -X POST -H "Content-Type: application/vnd.schemaregistry.v1+json" --data
 ```
 
 ## 7 Логи
+
+Скриншоты в папке screenshots
 
 Создание пользователя
 ```
