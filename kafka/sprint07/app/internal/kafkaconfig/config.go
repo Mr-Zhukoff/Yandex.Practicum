@@ -1,4 +1,4 @@
-бpackage kafkaconfig
+package kafkaconfig
 
 import (
 	"context"

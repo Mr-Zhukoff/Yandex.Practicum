@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"sprint07-kafka/internal/kafkaconfig"
@@ -20,7 +21,7 @@ func main() {
 		dialer.SASLMechanism = transport.SASL
 	}
 
-	reader := kafka.NewReader(kafka.ReaderConfig{
+	readerUserEvents := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:     cfg.Brokers,
 		Topic:       "user-events",
 		GroupID:     "user-events-group",
@@ -29,19 +30,45 @@ func main() {
 		StartOffset: kafka.FirstOffset,
 		Dialer:      dialer,
 	})
-	defer reader.Close()
+	defer readerUserEvents.Close()
+
+	readerUsers := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     cfg.Brokers,
+		Topic:       "users",
+		GroupID:     "users-group",
+		MinBytes:    1,
+		MaxBytes:    10e6,
+		StartOffset: kafka.FirstOffset,
+		Dialer:      dialer,
+	})
+	defer readerUsers.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	for {
-		m, err := reader.ReadMessage(ctx)
-		if err != nil {
-			log.Printf("consumer: stop reading: %v", err)
-			break
-		}
+	readLoop := func(name string, reader *kafka.Reader) {
+		for {
+			m, err := reader.ReadMessage(ctx)
+			if err != nil {
+				log.Printf("consumer[%s]: stop reading: %v", name, err)
+				break
+			}
 
-		fmt.Printf("consumer: received topic=%s partition=%d offset=%d key=%s value=%s\n",
-			m.Topic, m.Partition, m.Offset, string(m.Key), string(m.Value))
+			fmt.Printf("consumer[%s]: received topic=%s partition=%d offset=%d key=%s value=%s\n",
+				name, m.Topic, m.Partition, m.Offset, string(m.Key), string(m.Value))
+		}
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		readLoop("user-events", readerUserEvents)
+	}()
+	go func() {
+		defer wg.Done()
+		readLoop("users", readerUsers)
+	}()
+
+	wg.Wait()
 }
