@@ -1,0 +1,7 @@
+[
+  {
+    "product_id": "forbidden-001",
+    "reason": "Seed product used to verify filtering",
+    "active": true
+  }
+]
