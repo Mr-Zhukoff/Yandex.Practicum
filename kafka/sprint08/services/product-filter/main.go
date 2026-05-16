@@ -24,6 +24,8 @@ func main() {
 	dlqTopic := flag.String("dlq-topic", "shop.products.dlq", "dead-letter topic")
 	forbiddenTopic := flag.String("forbidden-topic", "forbidden.products.state", "forbidden products compacted table topic")
 	groupID := flag.String("group", "product-filter", "Goka processor group")
+	tlsOptions := kafkautil.TLSOptions{}
+	kafkautil.AddTLSFlags(flag.CommandLine, &tlsOptions)
 	flag.Parse()
 
 	brokers := kafkautil.Brokers(*brokersCSV)
@@ -49,7 +51,11 @@ func main() {
 		goka.Lookup(forbiddenTable, forbiddenCodec),
 	)
 
-	processor, err := goka.NewProcessor(brokers, graph)
+	processorOptions, err := gokautil.ProcessorOptions(tlsOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	processor, err := goka.NewProcessor(brokers, graph, processorOptions...)
 	if err != nil {
 		log.Fatal(err)
 	}

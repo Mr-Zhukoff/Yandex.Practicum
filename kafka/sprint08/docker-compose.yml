@@ -1,31 +1,284 @@
 name: marketplace-analytics
 
 services:
-  kafka:
+  kafka1:
     image: bitnami/kafka:3.8
-    container_name: marketplace-kafka
+    container_name: marketplace-kafka-1
     ports:
       - "9092:9092"
     environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
       KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "abcdefghijklmnopqrstuv"
       KAFKA_CFG_NODE_ID: "1"
       KAFKA_CFG_PROCESS_ROLES: "broker,controller"
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka1:9093,2@kafka2:9093,3@kafka3:9093"
       KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka1:29092,EXTERNAL://localhost:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:SSL,EXTERNAL:SSL,CONTROLLER:SSL"
       KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_TLS_TYPE: "JKS"
+      KAFKA_CERTIFICATE_PASSWORD: "changeit"
+      KAFKA_TLS_CLIENT_AUTH: "required"
+      KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka1.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.truststore.jks"
+      KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_CLIENT_AUTH: "required"
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_CFG_SUPER_USERS: "User:CN=admin;User:CN=kafka1;User:CN=kafka2;User:CN=kafka3"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
       KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
-      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
-      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
-      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
-      - kafka-data:/bitnami/kafka
+      - kafka1-data:/bitnami/kafka
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka2:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka-2
+    ports:
+      - "9094:9092"
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "abcdefghijklmnopqrstuv"
+      KAFKA_CFG_NODE_ID: "2"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka1:9093,2@kafka2:9093,3@kafka3:9093"
+      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka2:29092,EXTERNAL://localhost:9094"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:SSL,EXTERNAL:SSL,CONTROLLER:SSL"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_TLS_TYPE: "JKS"
+      KAFKA_CERTIFICATE_PASSWORD: "changeit"
+      KAFKA_TLS_CLIENT_AUTH: "required"
+      KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.truststore.jks"
+      KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_CLIENT_AUTH: "required"
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_CFG_SUPER_USERS: "User:CN=admin;User:CN=kafka1;User:CN=kafka2;User:CN=kafka3"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+    volumes:
+      - kafka2-data:/bitnami/kafka
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka3:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka-3
+    ports:
+      - "9096:9092"
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "abcdefghijklmnopqrstuv"
+      KAFKA_CFG_NODE_ID: "3"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka1:9093,2@kafka2:9093,3@kafka3:9093"
+      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka3:29092,EXTERNAL://localhost:9096"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:SSL,EXTERNAL:SSL,CONTROLLER:SSL"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_TLS_TYPE: "JKS"
+      KAFKA_CERTIFICATE_PASSWORD: "changeit"
+      KAFKA_TLS_CLIENT_AUTH: "required"
+      KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka3.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.truststore.jks"
+      KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_CLIENT_AUTH: "required"
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_CFG_SUPER_USERS: "User:CN=admin;User:CN=kafka1;User:CN=kafka2;User:CN=kafka3"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+    volumes:
+      - kafka3-data:/bitnami/kafka
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka2-1:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka2-1
+    ports:
+      - "9192:9092"
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "vwxyzabcdefghijklmnopq"
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka2-1:9093,2@kafka2-2:9093,3@kafka2-3:9093"
+      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka2-1:29092,EXTERNAL://localhost:9192"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:SSL,EXTERNAL:SSL,CONTROLLER:SSL"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_TLS_TYPE: "JKS"
+      KAFKA_CERTIFICATE_PASSWORD: "changeit"
+      KAFKA_TLS_CLIENT_AUTH: "required"
+      KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2-1.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.truststore.jks"
+      KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_CLIENT_AUTH: "required"
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_CFG_SUPER_USERS: "User:CN=admin;User:CN=kafka2-1;User:CN=kafka2-2;User:CN=kafka2-3"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+    volumes:
+      - kafka2-1-data:/bitnami/kafka
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka2-2:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka2-2
+    ports:
+      - "9194:9092"
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "vwxyzabcdefghijklmnopq"
+      KAFKA_CFG_NODE_ID: "2"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka2-1:9093,2@kafka2-2:9093,3@kafka2-3:9093"
+      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka2-2:29092,EXTERNAL://localhost:9194"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:SSL,EXTERNAL:SSL,CONTROLLER:SSL"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_TLS_TYPE: "JKS"
+      KAFKA_CERTIFICATE_PASSWORD: "changeit"
+      KAFKA_TLS_CLIENT_AUTH: "required"
+      KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2-2.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.truststore.jks"
+      KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_CLIENT_AUTH: "required"
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_CFG_SUPER_USERS: "User:CN=admin;User:CN=kafka2-1;User:CN=kafka2-2;User:CN=kafka2-3"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+    volumes:
+      - kafka2-2-data:/bitnami/kafka
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  kafka2-3:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka2-3
+    ports:
+      - "9196:9092"
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "vwxyzabcdefghijklmnopq"
+      KAFKA_CFG_NODE_ID: "3"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka2-1:9093,2@kafka2-2:9093,3@kafka2-3:9093"
+      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka2-3:29092,EXTERNAL://localhost:9196"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:SSL,EXTERNAL:SSL,CONTROLLER:SSL"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_TLS_TYPE: "JKS"
+      KAFKA_CERTIFICATE_PASSWORD: "changeit"
+      KAFKA_TLS_CLIENT_AUTH: "required"
+      KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2-3.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_TRUSTSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.truststore.jks"
+      KAFKA_CFG_SSL_TRUSTSTORE_PASSWORD: "changeit"
+      KAFKA_CFG_SSL_CLIENT_AUTH: "required"
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_CFG_SUPER_USERS: "User:CN=admin;User:CN=kafka2-1;User:CN=kafka2-2;User:CN=kafka2-3"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "2"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+    volumes:
+      - kafka2-3-data:/bitnami/kafka
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -34,11 +287,82 @@ services:
     image: bitnami/kafka:3.8
     container_name: marketplace-kafka-init
     depends_on:
-      kafka:
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_healthy
+      kafka3:
         condition: service_healthy
     volumes:
       - ./scripts/create-topics.sh:/scripts/create-topics.sh:ro
-    command: ["bash", "/scripts/create-topics.sh", "kafka:29092"]
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    environment:
+      COMMAND_CONFIG: "/opt/bitnami/kafka/config/certs/admin-ssl.properties"
+    command: ["bash", "/scripts/create-topics.sh", "kafka1:29092,kafka2:29092,kafka3:29092"]
+    networks:
+      - app-net
+
+  kafka2-init:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka2-init
+    depends_on:
+      kafka2-1:
+        condition: service_healthy
+      kafka2-2:
+        condition: service_healthy
+      kafka2-3:
+        condition: service_healthy
+    volumes:
+      - ./scripts/create-topics.sh:/scripts/create-topics.sh:ro
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    environment:
+      COMMAND_CONFIG: "/opt/bitnami/kafka/config/certs/admin-ssl.properties"
+    command: ["bash", "/scripts/create-topics.sh", "kafka2-1:29092,kafka2-2:29092,kafka2-3:29092"]
+    networks:
+      - app-net
+
+  kafka-acls:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka-acls
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./scripts/create-acls.sh:/scripts/create-acls.sh:ro
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    environment:
+      COMMAND_CONFIG: "/opt/bitnami/kafka/config/certs/admin-ssl.properties"
+    command: ["bash", "/scripts/create-acls.sh", "kafka1:29092,kafka2:29092,kafka3:29092"]
+    networks:
+      - app-net
+
+  kafka2-acls:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-kafka2-acls
+    depends_on:
+      kafka2-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./scripts/create-acls.sh:/scripts/create-acls.sh:ro
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    environment:
+      COMMAND_CONFIG: "/opt/bitnami/kafka/config/certs/admin-ssl.properties"
+    command: ["bash", "/scripts/create-acls.sh", "kafka2-1:29092,kafka2-2:29092,kafka2-3:29092"]
+    networks:
+      - app-net
+
+  mirror-maker:
+    image: bitnami/kafka:3.8
+    container_name: marketplace-mirror-maker
+    depends_on:
+      kafka-acls:
+        condition: service_completed_successfully
+      kafka2-acls:
+        condition: service_completed_successfully
+    volumes:
+      - ./configs/kafka/mm2.properties:/opt/bitnami/kafka/config/mm2.properties:ro
+      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+    command: ["/opt/bitnami/kafka/bin/connect-mirror-maker.sh", "/opt/bitnami/kafka/config/mm2.properties"]
     networks:
       - app-net
 
@@ -72,9 +396,11 @@ services:
     container_name: marketplace-product-filter
     profiles: ["app"]
     depends_on:
-      kafka-init:
+      kafka-acls:
         condition: service_completed_successfully
-    command: ["--brokers", "kafka:29092"]
+    command: ["--brokers", "kafka1:29092,kafka2:29092,kafka3:29092", "--tls", "--tls-ca-cert", "/certs/ca.crt", "--tls-client-cert", "/certs/product-filter.crt", "--tls-client-key", "/certs/product-filter.key"]
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
     networks:
       - app-net
 
@@ -87,15 +413,24 @@ services:
     container_name: marketplace-postgres-sink
     profiles: ["app"]
     depends_on:
-      kafka-init:
+      kafka-acls:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
     command:
       - "--brokers"
-      - "kafka:29092"
+      - "kafka1:29092,kafka2:29092,kafka3:29092"
+      - "--tls"
+      - "--tls-ca-cert"
+      - "/certs/ca.crt"
+      - "--tls-client-cert"
+      - "/certs/postgres-sink.crt"
+      - "--tls-client-key"
+      - "/certs/postgres-sink.key"
       - "--database-url"
       - "postgres://marketplace:marketplace@postgres:5432/marketplace?sslmode=disable"
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
     networks:
       - app-net
 
@@ -108,11 +443,12 @@ services:
     container_name: marketplace-shop-api
     profiles: ["jobs"]
     depends_on:
-      kafka-init:
+      kafka-acls:
         condition: service_completed_successfully
-    command: ["--brokers", "kafka:29092", "--file", "/data/products.json"]
+    command: ["--brokers", "kafka1:29092,kafka2:29092,kafka3:29092", "--tls", "--tls-ca-cert", "/certs/ca.crt", "--tls-client-cert", "/certs/shop-api.crt", "--tls-client-key", "/certs/shop-api.key", "--file", "/data/products.json"]
     volumes:
       - ./data:/data:ro
+      - ./configs/kafka/certs:/certs:ro
     networks:
       - app-net
 
@@ -125,11 +461,13 @@ services:
     container_name: marketplace-client-api
     profiles: ["jobs"]
     depends_on:
-      kafka-init:
+      kafka-acls:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-    command: ["search", "--brokers", "kafka:29092", "--database-url", "postgres://marketplace:marketplace@postgres:5432/marketplace?sslmode=disable", "--user-id", "user_001", "--query", "умные часы"]
+    command: ["search", "--brokers", "kafka1:29092,kafka2:29092,kafka3:29092", "--tls", "--tls-ca-cert", "/certs/ca.crt", "--tls-client-cert", "/certs/client-api.crt", "--tls-client-key", "/certs/client-api.key", "--database-url", "postgres://marketplace:marketplace@postgres:5432/marketplace?sslmode=disable", "--user-id", "user_001", "--query", "умные часы"]
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
     networks:
       - app-net
 
@@ -142,9 +480,11 @@ services:
     container_name: marketplace-forbidden-cli
     profiles: ["jobs"]
     depends_on:
-      kafka-init:
+      kafka-acls:
         condition: service_completed_successfully
-    command: ["add", "--brokers", "kafka:29092", "--product-id", "forbidden-001", "--reason", "Seed product used to verify filtering"]
+    command: ["add", "--brokers", "kafka1:29092,kafka2:29092,kafka3:29092", "--tls", "--tls-ca-cert", "/certs/ca.crt", "--tls-client-cert", "/certs/admin.crt", "--tls-client-key", "/certs/admin.key", "--product-id", "forbidden-001", "--reason", "Seed product used to verify filtering"]
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
     networks:
       - app-net
 
@@ -153,5 +493,10 @@ networks:
     name: marketplace-app-net
 
 volumes:
-  kafka-data:
+  kafka1-data:
+  kafka2-data:
+  kafka3-data:
+  kafka2-1-data:
+  kafka2-2-data:
+  kafka2-3-data:
   postgres-data:

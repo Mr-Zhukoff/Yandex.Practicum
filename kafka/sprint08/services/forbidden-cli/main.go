@@ -29,6 +29,8 @@ func main() {
 	fs := flag.NewFlagSet(command, flag.ExitOnError)
 	fs.StringVar(&brokersCSV, "brokers", brokersCSV, "comma-separated Kafka brokers")
 	fs.StringVar(&topic, "topic", topic, "Kafka compacted topic for forbidden products")
+	tlsOptions := kafkautil.TLSOptions{}
+	kafkautil.AddTLSFlags(fs, &tlsOptions)
 	partitions := fs.Int("partitions", 3, "number of partitions to scan for list command")
 	productID := fs.String("product-id", "", "product ID")
 	reason := fs.String("reason", "", "reason for forbidding the product")
@@ -41,7 +43,7 @@ func main() {
 		os.Exit(2)
 	}
 	if command == "list" {
-		listForbiddenProducts(kafkautil.Brokers(brokersCSV), topic, *partitions)
+		listForbiddenProducts(kafkautil.Brokers(brokersCSV), topic, *partitions, tlsOptions)
 		return
 	}
 	if *productID == "" {
@@ -60,7 +62,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	writer := kafkautil.NewWriter(kafkautil.Brokers(brokersCSV), topic)
+	tlsConfig, err := kafkautil.BuildTLSConfig(tlsOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	writer := kafkautil.NewWriterWithTLS(kafkautil.Brokers(brokersCSV), topic, tlsConfig)
 	defer func() { _ = writer.Close() }()
 
 	msg := kafka.Message{Key: []byte(*productID), Value: value, Time: time.Now().UTC()}
@@ -70,10 +76,14 @@ func main() {
 	fmt.Printf("forbidden product state updated: product_id=%s active=%t\n", *productID, active)
 }
 
-func listForbiddenProducts(brokers []string, topic string, partitions int) {
+func listForbiddenProducts(brokers []string, topic string, partitions int, tlsOptions kafkautil.TLSOptions) {
+	tlsConfig, err := kafkautil.BuildTLSConfig(tlsOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
 	states := map[string]events.ForbiddenProduct{}
 	for partition := 0; partition < partitions; partition++ {
-		reader := kafka.NewReader(kafka.ReaderConfig{
+		readerConfig := kafka.ReaderConfig{
 			Brokers:     brokers,
 			Topic:       topic,
 			Partition:   partition,
@@ -81,7 +91,11 @@ func listForbiddenProducts(brokers []string, topic string, partitions int) {
 			MaxBytes:    10e6,
 			StartOffset: kafka.FirstOffset,
 			MaxWait:     500 * time.Millisecond,
-		})
+		}
+		if tlsConfig != nil {
+			readerConfig.Dialer = &kafka.Dialer{TLS: tlsConfig}
+		}
+		reader := kafka.NewReader(readerConfig)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		for {
 			msg, err := reader.ReadMessage(ctx)

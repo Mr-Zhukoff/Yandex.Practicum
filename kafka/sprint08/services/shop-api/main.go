@@ -20,6 +20,8 @@ func main() {
 	file := flag.String("file", "./data/products.json", "path to product JSON file")
 	brokersCSV := flag.String("brokers", "localhost:9092", "comma-separated Kafka brokers")
 	topic := flag.String("topic", "shop.products.raw", "Kafka topic for raw products")
+	tlsOptions := kafkautil.TLSOptions{}
+	kafkautil.AddTLSFlags(flag.CommandLine, &tlsOptions)
 	flag.Parse()
 
 	products, err := productio.ReadProducts(*file)
@@ -28,7 +30,11 @@ func main() {
 	}
 
 	ctx := context.Background()
-	writer := kafkautil.NewWriter(kafkautil.Brokers(*brokersCSV), *topic)
+	tlsConfig, err := kafkautil.BuildTLSConfig(tlsOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	writer := kafkautil.NewWriterWithTLS(kafkautil.Brokers(*brokersCSV), *topic, tlsConfig)
 	defer func() { _ = writer.Close() }()
 
 	for _, product := range products {

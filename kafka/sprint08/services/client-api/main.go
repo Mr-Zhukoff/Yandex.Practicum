@@ -39,6 +39,8 @@ func runSearch(args []string) {
 	brokersCSV := fs.String("brokers", "localhost:9092", "comma-separated Kafka brokers")
 	topic := fs.String("topic", "client.search.requests", "Kafka topic for search requests")
 	databaseURL := fs.String("database-url", "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable", "PostgreSQL URL")
+	tlsOptions := kafkautil.TLSOptions{}
+	kafkautil.AddTLSFlags(fs, &tlsOptions)
 	userID := fs.String("user-id", "", "user ID")
 	query := fs.String("query", "", "search query")
 	_ = fs.Parse(args)
@@ -48,7 +50,7 @@ func runSearch(args []string) {
 	}
 
 	req := events.SearchRequest{UserID: *userID, Query: *query}
-	publishEvent(*brokersCSV, *topic, *userID, "product_search_requested", req)
+	publishEvent(*brokersCSV, *topic, *userID, "product_search_requested", req, tlsOptions)
 
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, *databaseURL)
@@ -88,6 +90,8 @@ func runRecommend(args []string) {
 	brokersCSV := fs.String("brokers", "localhost:9092", "comma-separated Kafka brokers")
 	topic := fs.String("topic", "client.recommendation.requests", "Kafka topic for recommendation requests")
 	databaseURL := fs.String("database-url", "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable", "PostgreSQL URL")
+	tlsOptions := kafkautil.TLSOptions{}
+	kafkautil.AddTLSFlags(fs, &tlsOptions)
 	userID := fs.String("user-id", "", "user ID")
 	category := fs.String("category", "", "category")
 	_ = fs.Parse(args)
@@ -97,7 +101,7 @@ func runRecommend(args []string) {
 	}
 
 	req := events.RecommendationRequest{UserID: *userID, Category: *category}
-	publishEvent(*brokersCSV, *topic, *userID, "recommendation_requested", req)
+	publishEvent(*brokersCSV, *topic, *userID, "recommendation_requested", req, tlsOptions)
 
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, *databaseURL)
@@ -131,7 +135,7 @@ LIMIT 5`, *category)
 	}
 }
 
-func publishEvent[T any](brokersCSV, topic, key, eventType string, payload T) {
+func publishEvent[T any](brokersCSV, topic, key, eventType string, payload T, tlsOptions kafkautil.TLSOptions) {
 	envelope := events.EventEnvelope[T]{
 		EventID:   uuid.NewString(),
 		EventType: eventType,
@@ -143,7 +147,11 @@ func publishEvent[T any](brokersCSV, topic, key, eventType string, payload T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	writer := kafkautil.NewWriter(kafkautil.Brokers(brokersCSV), topic)
+	tlsConfig, err := kafkautil.BuildTLSConfig(tlsOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	writer := kafkautil.NewWriterWithTLS(kafkautil.Brokers(brokersCSV), topic, tlsConfig)
 	defer func() { _ = writer.Close() }()
 	if err := writer.WriteMessages(context.Background(), kafka.Message{Key: []byte(key), Value: value, Time: envelope.EventTime}); err != nil {
 		log.Fatal(err)

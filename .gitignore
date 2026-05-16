@@ -31,3 +31,9 @@ go.work.sum
 # .idea/
  .vscode/
 *.crt
+*.key
+*.csr
+*.srl
+*.jks
+*.p12
+configs/kafka/certs/

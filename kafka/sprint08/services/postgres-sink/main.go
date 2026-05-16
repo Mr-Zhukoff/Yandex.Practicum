@@ -17,6 +17,8 @@ func main() {
 	topic := flag.String("topic", "shop.products.allowed", "allowed products topic")
 	groupID := flag.String("group", "postgres-sink", "Kafka consumer group")
 	databaseURL := flag.String("database-url", "postgres://marketplace:marketplace@localhost:5432/marketplace?sslmode=disable", "PostgreSQL URL")
+	tlsOptions := kafkautil.TLSOptions{}
+	kafkautil.AddTLSFlags(flag.CommandLine, &tlsOptions)
 	flag.Parse()
 
 	ctx := context.Background()
@@ -26,7 +28,11 @@ func main() {
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
-	reader := kafkautil.NewReader(kafkautil.Brokers(*brokersCSV), *topic, *groupID)
+	tlsConfig, err := kafkautil.BuildTLSConfig(tlsOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	reader := kafkautil.NewReaderWithTLS(kafkautil.Brokers(*brokersCSV), *topic, *groupID, tlsConfig)
 	defer func() { _ = reader.Close() }()
 
 	log.Printf("postgres-sink started")

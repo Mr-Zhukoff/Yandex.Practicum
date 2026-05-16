@@ -11,7 +11,11 @@ The current slice includes:
 - Go module and shared event contracts.
 - Sample product and forbidden-product data.
 - Local Docker Compose baseline with:
-  - Kafka single-broker KRaft mode,
+  - three-broker Kafka KRaft cluster,
+  - secondary three-broker Kafka KRaft cluster for analytics,
+  - MirrorMaker 2 topic replication from primary to secondary,
+  - Kafka TLS/mTLS and ACL configuration,
+  - replicated topics with `min.insync.replicas=2`,
   - PostgreSQL,
   - topic initialization.
 - Go services:
@@ -24,53 +28,129 @@ The current slice includes:
 
 ## Start infrastructure
 
+Generate local development certificates first:
+
 ```bash
-docker compose up -d kafka postgres kafka-init
+./scripts/generate-certs.sh
+```
+
+```bash
+docker compose up -d kafka1 kafka2 kafka3 kafka2-1 kafka2-2 kafka2-3 postgres kafka-init kafka2-init kafka-acls kafka2-acls mirror-maker
 ```
 
 Kafka is exposed in two ways:
 
 - from the host: `localhost:9092`
-- from Docker containers: `kafka:29092`
+- from Docker containers: `kafka1:29092,kafka2:29092,kafka3:29092`
+
+Host broker ports:
+
+Primary cluster:
+
+- broker 1: `localhost:9092`
+- broker 2: `localhost:9094`
+- broker 3: `localhost:9096`
+
+Secondary analytics cluster:
+
+- broker 1: `localhost:9192`
+- broker 2: `localhost:9194`
+- broker 3: `localhost:9196`
+
+MirrorMaker 2 replicates these primary topics to the secondary cluster:
+
+- `shop.products.allowed`
+- `client.search.requests`
+- `client.recommendation.requests`
+- `analytics.recommendations`
 
 ## Run local pipeline
 
 In separate terminals:
 
 ```bash
-go run ./services/forbidden-cli add --product-id forbidden-001 --reason "Seed product used to verify filtering"
+go run ./services/forbidden-cli add \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/admin.crt \
+  --tls-client-key ./configs/kafka/certs/admin.key \
+  --tls-server-name localhost \
+  --product-id forbidden-001 \
+  --reason "Seed product used to verify filtering"
 ```
 
 List active forbidden products:
 
 ```bash
-go run ./services/forbidden-cli list
+go run ./services/forbidden-cli list \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/admin.crt \
+  --tls-client-key ./configs/kafka/certs/admin.key \
+  --tls-server-name localhost
 ```
 
 ```bash
-go run ./services/product-filter
+go run ./services/product-filter \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/product-filter.crt \
+  --tls-client-key ./configs/kafka/certs/product-filter.key \
+  --tls-server-name localhost
 ```
 
 ```bash
-go run ./services/postgres-sink
+go run ./services/postgres-sink \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/postgres-sink.crt \
+  --tls-client-key ./configs/kafka/certs/postgres-sink.key \
+  --tls-server-name localhost
 ```
 
 Then send products:
 
 ```bash
-go run ./services/shop-api --file ./data/products.json
+go run ./services/shop-api \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/shop-api.crt \
+  --tls-client-key ./configs/kafka/certs/shop-api.key \
+  --tls-server-name localhost \
+  --file ./data/products.json
 ```
 
 Search products:
 
 ```bash
-go run ./services/client-api search --user-id user_001 --query "умные часы"
+go run ./services/client-api search \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/client-api.crt \
+  --tls-client-key ./configs/kafka/certs/client-api.key \
+  --tls-server-name localhost \
+  --user-id user_001 \
+  --query "умные часы"
 ```
 
 Request recommendations:
 
 ```bash
-go run ./services/client-api recommend --user-id user_001 --category "Электроника"
+go run ./services/client-api recommend \
+  --brokers localhost:9092,localhost:9094,localhost:9096 \
+  --tls \
+  --tls-ca-cert ./configs/kafka/certs/ca.crt \
+  --tls-client-cert ./configs/kafka/certs/client-api.crt \
+  --tls-client-key ./configs/kafka/certs/client-api.key \
+  --tls-server-name localhost \
+  --user-id user_001 \
+  --category "Электроника"
 ```
 
 ## Run with Docker Compose profiles
