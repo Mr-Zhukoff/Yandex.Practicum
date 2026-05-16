@@ -2,15 +2,17 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"log"
-	"sync"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/lovoo/goka"
 
 	"marketplace-analytics/internal/events"
+	"marketplace-analytics/internal/gokautil"
 	"marketplace-analytics/internal/kafkautil"
 )
 
@@ -20,87 +22,61 @@ func main() {
 	allowedTopic := flag.String("allowed-topic", "shop.products.allowed", "allowed products topic")
 	rejectedTopic := flag.String("rejected-topic", "shop.products.rejected", "rejected products topic")
 	dlqTopic := flag.String("dlq-topic", "shop.products.dlq", "dead-letter topic")
-	forbiddenTopic := flag.String("forbidden-topic", "forbidden.products.state", "forbidden products state topic")
-	groupID := flag.String("group", "product-filter", "Kafka consumer group")
+	forbiddenTopic := flag.String("forbidden-topic", "forbidden.products.state", "forbidden products compacted table topic")
+	groupID := flag.String("group", "product-filter", "Goka processor group")
 	flag.Parse()
 
 	brokers := kafkautil.Brokers(*brokersCSV)
-	ctx := context.Background()
-	forbidden := &forbiddenStore{items: map[string]events.ForbiddenProduct{}}
+	group := goka.Group(*groupID)
+	rawStream := goka.Stream(*rawTopic)
+	allowedStream := goka.Stream(*allowedTopic)
+	rejectedStream := goka.Stream(*rejectedTopic)
+	dlqStream := goka.Stream(*dlqTopic)
+	forbiddenTable := goka.Table(*forbiddenTopic)
 
-	go consumeForbiddenState(ctx, brokers, *forbiddenTopic, *groupID+"-forbidden", forbidden)
+	productCodec := gokautil.JSONCodec[events.EventEnvelope[events.Product]]{}
+	rejectedCodec := gokautil.JSONCodec[events.EventEnvelope[events.RejectedProduct]]{}
+	dlqCodec := gokautil.JSONCodec[events.EventEnvelope[events.DeadLetter]]{}
+	forbiddenCodec := gokautil.JSONCodec[events.ForbiddenProduct]{}
 
-	rawReader := kafkautil.NewReader(brokers, *rawTopic, *groupID)
-	defer func() { _ = rawReader.Close() }()
-	allowedWriter := kafkautil.NewWriter(brokers, *allowedTopic)
-	rejectedWriter := kafkautil.NewWriter(brokers, *rejectedTopic)
-	dlqWriter := kafkautil.NewWriter(brokers, *dlqTopic)
-	defer func() { _ = allowedWriter.Close(); _ = rejectedWriter.Close(); _ = dlqWriter.Close() }()
+	graph := goka.DefineGroup(group,
+		goka.Input(rawStream, productCodec, func(ctx goka.Context, msg interface{}) {
+			processProduct(ctx, msg, forbiddenTable, allowedStream, rejectedStream, dlqStream)
+		}),
+		goka.Output(allowedStream, productCodec),
+		goka.Output(rejectedStream, rejectedCodec),
+		goka.Output(dlqStream, dlqCodec),
+		goka.Lookup(forbiddenTable, forbiddenCodec),
+	)
 
-	log.Printf("product-filter started; this baseline processor will be replaced with Goka state processing in the next implementation slice")
-	for {
-		msg, err := rawReader.ReadMessage(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
-		processProduct(ctx, msg, forbidden, allowedWriter, rejectedWriter, dlqWriter)
+	processor, err := goka.NewProcessor(brokers, graph)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	log.Printf("Goka product-filter started: input=%s allowed=%s rejected=%s dlq=%s forbidden-table=%s", *rawTopic, *allowedTopic, *rejectedTopic, *dlqTopic, *forbiddenTopic)
+	if err := processor.Run(ctx); err != nil && ctx.Err() == nil {
+		log.Fatal(err)
 	}
 }
 
-type forbiddenStore struct {
-	mu    sync.RWMutex
-	items map[string]events.ForbiddenProduct
-}
-
-func (s *forbiddenStore) set(record events.ForbiddenProduct) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if record.Active {
-		s.items[record.ProductID] = record
-		return
-	}
-	delete(s.items, record.ProductID)
-}
-
-func (s *forbiddenStore) isForbidden(productID string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	_, ok := s.items[productID]
-	return ok
-}
-
-func consumeForbiddenState(ctx context.Context, brokers []string, topic, groupID string, store *forbiddenStore) {
-	reader := kafkautil.NewReader(brokers, topic, groupID)
-	defer func() { _ = reader.Close() }()
-	for {
-		msg, err := reader.ReadMessage(ctx)
-		if err != nil {
-			log.Printf("read forbidden state: %v", err)
-			return
-		}
-		var record events.ForbiddenProduct
-		if err := json.Unmarshal(msg.Value, &record); err != nil {
-			log.Printf("invalid forbidden state for key %q: %v", string(msg.Key), err)
-			continue
-		}
-		store.set(record)
-		log.Printf("forbidden state updated: product_id=%s active=%t", record.ProductID, record.Active)
-	}
-}
-
-func processProduct(ctx context.Context, msg kafka.Message, forbidden *forbiddenStore, allowedWriter, rejectedWriter, dlqWriter *kafka.Writer) {
-	var envelope events.EventEnvelope[events.Product]
-	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
-		writeDLQ(ctx, dlqWriter, msg, "invalid JSON: "+err.Error())
-		return
-	}
-	if err := events.ValidateProduct(envelope.Payload); err != nil {
-		writeDLQ(ctx, dlqWriter, msg, "invalid product: "+err.Error())
+func processProduct(ctx goka.Context, msg interface{}, forbiddenTable goka.Table, allowedStream, rejectedStream, dlqStream goka.Stream) {
+	envelope, ok := msg.(*events.EventEnvelope[events.Product])
+	if !ok || envelope == nil {
+		emitDLQ(ctx, dlqStream, "", "unexpected product message type")
 		return
 	}
 
 	product := envelope.Payload
-	if forbidden.isForbidden(product.ProductID) {
+	if err := events.ValidateProduct(product); err != nil {
+		emitDLQ(ctx, dlqStream, ctx.Key(), "invalid product: "+err.Error())
+		return
+	}
+
+	if isForbidden(ctx, forbiddenTable, product.ProductID) {
 		rejected := events.EventEnvelope[events.RejectedProduct]{
 			EventID:   envelope.EventID,
 			EventType: "product_rejected",
@@ -111,37 +87,39 @@ func processProduct(ctx context.Context, msg kafka.Message, forbidden *forbidden
 				Reason:  "product is forbidden",
 			},
 		}
-		writeJSON(ctx, rejectedWriter, product.ProductID, rejected)
+		ctx.Emit(rejectedStream, product.ProductID, rejected)
 		log.Printf("rejected forbidden product %s", product.ProductID)
 		return
 	}
 
-	writeJSON(ctx, allowedWriter, product.ProductID, envelope)
+	ctx.Emit(allowedStream, product.ProductID, envelope)
 	log.Printf("allowed product %s", product.ProductID)
 }
 
-func writeDLQ(ctx context.Context, writer *kafka.Writer, msg kafka.Message, reason string) {
+func isForbidden(ctx goka.Context, table goka.Table, productID string) bool {
+	value := ctx.Lookup(table, productID)
+	if value == nil {
+		return false
+	}
+	record, ok := value.(*events.ForbiddenProduct)
+	return ok && record.Active
+}
+
+func emitDLQ(ctx goka.Context, stream goka.Stream, key, reason string) {
+	if key == "" {
+		key = ctx.Key()
+	}
 	dlq := events.EventEnvelope[events.DeadLetter]{
-		EventID:   string(msg.Key),
+		EventID:   key,
 		EventType: "dead_letter",
 		EventTime: time.Now().UTC(),
 		Source:    "product-filter",
 		Payload: events.DeadLetter{
-			RawPayload: string(msg.Value),
+			RawPayload: "",
 			Reason:     reason,
 			Source:     "shop.products.raw",
 		},
 	}
-	writeJSON(ctx, writer, string(msg.Key), dlq)
-}
-
-func writeJSON(ctx context.Context, writer *kafka.Writer, key string, value any) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		log.Printf("marshal output: %v", err)
-		return
-	}
-	if err := writer.WriteMessages(ctx, kafka.Message{Key: []byte(key), Value: data, Time: time.Now().UTC()}); err != nil {
-		log.Printf("write output: %v", err)
-	}
+	ctx.Emit(stream, key, dlq)
+	log.Printf("sent product event to DLQ: key=%s reason=%s", key, reason)
 }
