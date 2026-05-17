@@ -37,3 +37,4 @@ go.work.sum
 *.jks
 *.p12
 configs/kafka/certs/
+.DS_Store
