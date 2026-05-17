@@ -2,7 +2,7 @@ name: marketplace-analytics
 
 services:
   kafka1:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka-1
     ports:
       - "9092:9092"
@@ -51,7 +51,7 @@ services:
       retries: 20
 
   kafka2:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka-2
     ports:
       - "9094:9092"
@@ -100,7 +100,7 @@ services:
       retries: 20
 
   kafka3:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka-3
     ports:
       - "9096:9092"
@@ -149,7 +149,7 @@ services:
       retries: 20
 
   kafka2-1:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka2-1
     ports:
       - "9192:9092"
@@ -198,7 +198,7 @@ services:
       retries: 20
 
   kafka2-2:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka2-2
     ports:
       - "9194:9092"
@@ -247,7 +247,7 @@ services:
       retries: 20
 
   kafka2-3:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka2-3
     ports:
       - "9196:9092"
@@ -296,7 +296,7 @@ services:
       retries: 20
 
   kafka-init:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka-init
     depends_on:
       kafka1:
@@ -315,7 +315,7 @@ services:
       - app-net
 
   kafka2-init:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka2-init
     depends_on:
       kafka2-1:
@@ -334,7 +334,7 @@ services:
       - app-net
 
   kafka-acls:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka-acls
     depends_on:
       kafka-init:
@@ -349,7 +349,7 @@ services:
       - app-net
 
   kafka2-acls:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-kafka2-acls
     depends_on:
       kafka2-init:
@@ -364,7 +364,7 @@ services:
       - app-net
 
   mirror-maker:
-    image: bitnami/kafka:3.8
+    image: bitnamilegacy/kafka:3.8
     container_name: marketplace-mirror-maker
     depends_on:
       kafka-acls:
