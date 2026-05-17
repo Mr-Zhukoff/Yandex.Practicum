@@ -6,7 +6,7 @@ PASSWORD="${CERT_PASSWORD:-changeit}"
 VALIDITY_DAYS="${VALIDITY_DAYS:-3650}"
 
 mkdir -p "${CERT_DIR}"
-rm -f "${CERT_DIR}"/*.jks "${CERT_DIR}"/*.crt "${CERT_DIR}"/*.csr "${CERT_DIR}"/*.srl
+rm -f "${CERT_DIR}"/*.jks "${CERT_DIR}"/*.p12 "${CERT_DIR}"/*.crt "${CERT_DIR}"/*.key "${CERT_DIR}"/*.csr "${CERT_DIR}"/*.srl "${CERT_DIR}"/*.properties
 
 echo "Generating CA..."
 openssl req -new -x509 \
@@ -32,7 +32,7 @@ create_keystore() {
     -keypass "${PASSWORD}" \
     -dname "CN=${cn}" \
     -ext "SAN=${san}" \
-    -storetype JKS \
+    -storetype PKCS12 \
     -noprompt
 
   keytool -certreq \
@@ -68,7 +68,7 @@ create_keystore() {
   keytool -importkeystore \
     -srckeystore "${CERT_DIR}/${name}.keystore.jks" \
     -destkeystore "${CERT_DIR}/${name}.p12" \
-    -srcstoretype JKS \
+    -srcstoretype PKCS12 \
     -deststoretype PKCS12 \
     -srcstorepass "${PASSWORD}" \
     -deststorepass "${PASSWORD}" \
@@ -105,7 +105,7 @@ keytool -importcert \
   -file "${CERT_DIR}/ca.crt" \
   -keystore "${CERT_DIR}/kafka.truststore.jks" \
   -storepass "${PASSWORD}" \
-  -storetype JKS \
+  -storetype PKCS12 \
   -noprompt
 
 cp "${CERT_DIR}/kafka.truststore.jks" "${CERT_DIR}/client.truststore.jks"
@@ -114,8 +114,10 @@ cat > "${CERT_DIR}/admin-ssl.properties" <<EOF
 security.protocol=SSL
 ssl.truststore.location=/opt/bitnami/kafka/config/certs/kafka.truststore.jks
 ssl.truststore.password=${PASSWORD}
+ssl.truststore.type=PKCS12
 ssl.keystore.location=/opt/bitnami/kafka/config/certs/admin.keystore.jks
 ssl.keystore.password=${PASSWORD}
+ssl.keystore.type=PKCS12
 ssl.key.password=${PASSWORD}
 EOF
 
