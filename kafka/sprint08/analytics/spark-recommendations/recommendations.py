@@ -59,27 +59,25 @@ def main():
         F.expr("transform(array_sort(ranked_products), x -> named_struct('product_id', x.product_id, 'name', x.name, 'score', x.score))").alias("products"),
     )
 
-    result = recommendations.select(
+    events = recommendations.select(
         F.col("category").alias("key"),
-        F.to_json(
+        F.struct(
+            F.col("event_id"),
+            F.lit("recommendations_calculated").alias("event_type"),
+            F.col("calculated_at").alias("event_time"),
+            F.lit("spark-recommendations").alias("source"),
             F.struct(
-                F.col("event_id"),
-                F.lit("recommendations_calculated").alias("event_type"),
-                F.col("calculated_at").alias("event_time"),
-                F.lit("spark-recommendations").alias("source"),
-                F.struct(
-                    F.col("recommendation_id"),
-                    F.col("category"),
-                    F.col("products"),
-                    F.col("calculated_at"),
-                ).alias("payload"),
-            )
+                F.col("recommendation_id"),
+                F.col("category"),
+                F.col("products"),
+                F.col("calculated_at"),
+            ).alias("payload"),
         ).alias("value"),
     )
 
-    result.write.mode("overwrite").json(args.output)
+    events.select("value.*").write.mode("overwrite").json(args.output)
 
-    result.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)").write.format("kafka").option(
+    events.select(F.col("key"), F.to_json(F.col("value")).alias("value")).selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)").write.format("kafka").option(
         "kafka.bootstrap.servers", args.bootstrap_servers
     ).option("topic", args.topic).option("kafka.security.protocol", "SSL").option(
         "kafka.ssl.truststore.location", args.truststore

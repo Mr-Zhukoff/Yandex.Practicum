@@ -238,7 +238,12 @@ func newDataLakeWriter(localDir, hdfsWebURL, hdfsBaseDir, hdfsUser string) *data
 			baseURL: strings.TrimRight(hdfsWebURL, "/"),
 			baseDir: "/" + strings.Trim(strings.TrimSpace(hdfsBaseDir), "/"),
 			user:    hdfsUser,
-			client:  &http.Client{Timeout: 30 * time.Second},
+			client: &http.Client{
+				Timeout: 30 * time.Second,
+				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
+			},
 		}
 	}
 	return &dataLakeWriter{localDir: localDir, hdfs: hdfs}
