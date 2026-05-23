@@ -484,6 +484,41 @@ services:
     networks:
       - app-net
 
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    platform: linux/amd64
+    container_name: marketplace-hdfs-namenode
+    profiles: ["analytics"]
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    environment:
+      CLUSTER_NAME: marketplace-analytics
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      HDFS_CONF_dfs_webhdfs_enabled: "true"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+    volumes:
+      - hadoop-namenode:/hadoop/dfs/name
+    networks:
+      - app-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    platform: linux/amd64
+    container_name: marketplace-hdfs-datanode
+    profiles: ["analytics"]
+    depends_on:
+      - namenode
+    environment:
+      SERVICE_PRECONDITION: namenode:9870
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      HDFS_CONF_dfs_webhdfs_enabled: "true"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+    volumes:
+      - hadoop-datanode:/hadoop/dfs/data
+    networks:
+      - app-net
+
   hdfs-ingestor:
     build:
       context: .
@@ -494,6 +529,10 @@ services:
     restart: unless-stopped
     profiles: ["app", "analytics"]
     depends_on:
+      namenode:
+        condition: service_started
+      datanode:
+        condition: service_started
       kafka2-acls:
         condition: service_completed_successfully
     command:
@@ -508,9 +547,94 @@ services:
       - "/certs/admin.key"
       - "--data-dir"
       - "/data/hdfs"
+      - "--hdfs-web-url"
+      - "http://namenode:9870"
+      - "--hdfs-base-dir"
+      - "/marketplace-analytics"
     volumes:
       - ./configs/kafka/certs:/certs:ro
       - ./data-lake:/data/hdfs
+    networks:
+      - app-net
+
+  spark-master:
+    image: bitnamilegacy/spark:3.5.1
+    container_name: marketplace-spark-master
+    profiles: ["analytics"]
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      HADOOP_USER_NAME: root
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./configs/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+    networks:
+      - app-net
+
+  spark-worker:
+    image: bitnamilegacy/spark:3.5.1
+    container_name: marketplace-spark-worker
+    profiles: ["analytics"]
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 1G
+      SPARK_WORKER_CORES: 1
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      HADOOP_USER_NAME: root
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
+      - ./configs/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+    networks:
+      - app-net
+
+  spark-recommendations:
+    image: bitnamilegacy/spark:3.5.1
+    container_name: marketplace-spark-recommendations
+    profiles: ["analytics-jobs"]
+    depends_on:
+      kafka2-acls:
+        condition: service_completed_successfully
+      namenode:
+        condition: service_started
+      datanode:
+        condition: service_started
+      spark-master:
+        condition: service_started
+    volumes:
+      - ./analytics/spark-recommendations:/opt/spark-apps:ro
+      - ./configs/kafka/certs:/certs:ro
+      - ./configs/hadoop/core-site.xml:/opt/bitnami/spark/conf/core-site.xml:ro
+    environment:
+      HOME: /tmp
+      HADOOP_USER_NAME: root
+    command:
+      - /opt/bitnami/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --conf
+      - spark.executorEnv.HADOOP_USER_NAME=root
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1
+      - /opt/spark-apps/recommendations.py
+      - --input
+      - hdfs://namenode:8020/marketplace-analytics/products_allowed/*/*.json
+      - --output
+      - hdfs://namenode:8020/marketplace-analytics/spark_recommendations
+      - --bootstrap-servers
+      - kafka2-1:29092,kafka2-2:29092,kafka2-3:29092
+      - --topic
+      - analytics.recommendations
     networks:
       - app-net
 
@@ -669,3 +793,5 @@ volumes:
   kafka2-3-data:
   postgres-data:
   grafana-data:
+  hadoop-namenode:
+  hadoop-datanode:

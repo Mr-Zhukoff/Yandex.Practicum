@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -28,14 +31,30 @@ type productStore struct {
 	products map[string]events.Product
 }
 
+type dataLakeWriter struct {
+	localDir string
+	hdfs     *webHDFSClient
+}
+
+type webHDFSClient struct {
+	baseURL string
+	baseDir string
+	user    string
+	client  *http.Client
+}
+
 func main() {
 	brokersCSV := flag.String("brokers", "localhost:9192", "comma-separated secondary Kafka brokers")
 	allowedTopic := flag.String("allowed-topic", "shop.products.allowed", "allowed products topic")
 	searchTopic := flag.String("search-topic", "client.search.requests", "search requests topic")
 	recommendationRequestsTopic := flag.String("recommendation-requests-topic", "client.recommendation.requests", "recommendation requests topic")
 	recommendationsTopic := flag.String("recommendations-topic", "analytics.recommendations", "recommendations output topic")
+	streamingRecommendations := flag.Bool("streaming-recommendations", false, "also calculate simple in-process recommendations while ingesting")
 	groupID := flag.String("group", "hdfs-ingestor", "Kafka consumer group prefix")
 	dataDir := flag.String("data-dir", "/data/hdfs", "HDFS-compatible local data lake directory")
+	hdfsWebURL := flag.String("hdfs-web-url", "", "WebHDFS namenode URL, for example http://namenode:9870")
+	hdfsBaseDir := flag.String("hdfs-base-dir", "/marketplace-analytics", "base HDFS directory for analytics datasets")
+	hdfsUser := flag.String("hdfs-user", "root", "WebHDFS user.name")
 	tlsOptions := kafkautil.TLSOptions{}
 	kafkautil.AddTLSFlags(flag.CommandLine, &tlsOptions)
 	flag.Parse()
@@ -49,21 +68,25 @@ func main() {
 	defer stop()
 
 	store := &productStore{products: make(map[string]events.Product)}
-	recommendationWriter := kafkautil.NewWriterWithTLS(kafkautil.Brokers(*brokersCSV), *recommendationsTopic, tlsConfig)
-	defer func() { _ = recommendationWriter.Close() }()
+	dataLake := newDataLakeWriter(*dataDir, *hdfsWebURL, *hdfsBaseDir, *hdfsUser)
+	var recommendationWriter *kafka.Writer
+	if *streamingRecommendations {
+		recommendationWriter = kafkautil.NewWriterWithTLS(kafkautil.Brokers(*brokersCSV), *recommendationsTopic, tlsConfig)
+		defer func() { _ = recommendationWriter.Close() }()
+	}
 
 	var wg sync.WaitGroup
 	startConsumer(ctx, &wg, *brokersCSV, *allowedTopic, *groupID+"-products", tlsConfig, func(ctx context.Context, msg kafka.Message) error {
-		return handleAllowedProduct(ctx, msg, *dataDir, store, recommendationWriter)
+		return handleAllowedProduct(ctx, msg, dataLake, store, recommendationWriter)
 	})
 	startConsumer(ctx, &wg, *brokersCSV, *searchTopic, *groupID+"-search", tlsConfig, func(ctx context.Context, msg kafka.Message) error {
-		return appendJSONL(*dataDir, "search_requests", msg.Value)
+		return dataLake.write(ctx, "search_requests", msg.Value)
 	})
 	startConsumer(ctx, &wg, *brokersCSV, *recommendationRequestsTopic, *groupID+"-recommendation-requests", tlsConfig, func(ctx context.Context, msg kafka.Message) error {
-		return handleRecommendationRequest(ctx, msg, *dataDir, store, recommendationWriter)
+		return handleRecommendationRequest(ctx, msg, dataLake, store, recommendationWriter)
 	})
 
-	log.Printf("analytics hdfs-ingestor started: brokers=%s data_dir=%s recommendations_topic=%s", *brokersCSV, *dataDir, *recommendationsTopic)
+	log.Printf("analytics hdfs-ingestor started: brokers=%s data_dir=%s hdfs_web_url=%s hdfs_base_dir=%s streaming_recommendations=%t recommendations_topic=%s", *brokersCSV, *dataDir, *hdfsWebURL, *hdfsBaseDir, *streamingRecommendations, *recommendationsTopic)
 	<-ctx.Done()
 	wg.Wait()
 }
@@ -104,9 +127,12 @@ func startConsumer(ctx context.Context, wg *sync.WaitGroup, brokersCSV, topic, g
 	}()
 }
 
-func handleAllowedProduct(ctx context.Context, msg kafka.Message, dataDir string, store *productStore, writer *kafka.Writer) error {
-	if err := appendJSONL(dataDir, "products_allowed", msg.Value); err != nil {
+func handleAllowedProduct(ctx context.Context, msg kafka.Message, dataLake *dataLakeWriter, store *productStore, writer *kafka.Writer) error {
+	if err := dataLake.write(ctx, "products_allowed", msg.Value); err != nil {
 		return err
+	}
+	if writer == nil {
+		return nil
 	}
 
 	var envelope events.EventEnvelope[events.Product]
@@ -122,22 +148,25 @@ func handleAllowedProduct(ctx context.Context, msg kafka.Message, dataDir string
 	store.products[product.ProductID] = product
 	store.mu.Unlock()
 
-	return emitRecommendation(ctx, dataDir, store, writer, "", product.Category)
+	return emitRecommendation(ctx, dataLake, store, writer, "", product.Category)
 }
 
-func handleRecommendationRequest(ctx context.Context, msg kafka.Message, dataDir string, store *productStore, writer *kafka.Writer) error {
-	if err := appendJSONL(dataDir, "recommendation_requests", msg.Value); err != nil {
+func handleRecommendationRequest(ctx context.Context, msg kafka.Message, dataLake *dataLakeWriter, store *productStore, writer *kafka.Writer) error {
+	if err := dataLake.write(ctx, "recommendation_requests", msg.Value); err != nil {
 		return err
+	}
+	if writer == nil {
+		return nil
 	}
 
 	var envelope events.EventEnvelope[events.RecommendationRequest]
 	if err := json.Unmarshal(msg.Value, &envelope); err != nil {
 		return fmt.Errorf("decode recommendation request: %w", err)
 	}
-	return emitRecommendation(ctx, dataDir, store, writer, envelope.Payload.UserID, envelope.Payload.Category)
+	return emitRecommendation(ctx, dataLake, store, writer, envelope.Payload.UserID, envelope.Payload.Category)
 }
 
-func emitRecommendation(ctx context.Context, dataDir string, store *productStore, writer *kafka.Writer, userID, category string) error {
+func emitRecommendation(ctx context.Context, dataLake *dataLakeWriter, store *productStore, writer *kafka.Writer, userID, category string) error {
 	category = strings.TrimSpace(category)
 	if category == "" {
 		return nil
@@ -191,7 +220,7 @@ func emitRecommendation(ctx context.Context, dataDir string, store *productStore
 	if err != nil {
 		return err
 	}
-	if err := appendJSONL(dataDir, "recommendations", value); err != nil {
+	if err := dataLake.write(ctx, "recommendations", value); err != nil {
 		return err
 	}
 
@@ -200,6 +229,79 @@ func emitRecommendation(ctx context.Context, dataDir string, store *productStore
 		key = userID + ":" + category
 	}
 	return writer.WriteMessages(ctx, kafka.Message{Key: []byte(key), Value: value, Time: recommendation.EventTime})
+}
+
+func newDataLakeWriter(localDir, hdfsWebURL, hdfsBaseDir, hdfsUser string) *dataLakeWriter {
+	var hdfs *webHDFSClient
+	if strings.TrimSpace(hdfsWebURL) != "" {
+		hdfs = &webHDFSClient{
+			baseURL: strings.TrimRight(hdfsWebURL, "/"),
+			baseDir: "/" + strings.Trim(strings.TrimSpace(hdfsBaseDir), "/"),
+			user:    hdfsUser,
+			client:  &http.Client{Timeout: 30 * time.Second},
+		}
+	}
+	return &dataLakeWriter{localDir: localDir, hdfs: hdfs}
+}
+
+func (w *dataLakeWriter) write(ctx context.Context, dataset string, value []byte) error {
+	if err := appendJSONL(w.localDir, dataset, value); err != nil {
+		return err
+	}
+	if w.hdfs == nil {
+		return nil
+	}
+	if err := w.hdfs.createJSON(ctx, dataset, value); err != nil {
+		return fmt.Errorf("write %s to HDFS: %w", dataset, err)
+	}
+	return nil
+}
+
+func (c *webHDFSClient) createJSON(ctx context.Context, dataset string, value []byte) error {
+	date := time.Now().UTC().Format("2006-01-02")
+	fileName := fmt.Sprintf("%d-%s.json", time.Now().UnixNano(), uuid.NewString())
+	hdfsPath := filepath.ToSlash(filepath.Join(c.baseDir, dataset, date, fileName))
+	createURL := c.operationURL(hdfsPath, "CREATE", url.Values{"overwrite": {"true"}, "createparent": {"true"}})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, createURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	location := resp.Header.Get("Location")
+	if resp.StatusCode != http.StatusTemporaryRedirect || location == "" {
+		return fmt.Errorf("create redirect status=%s location=%q", resp.Status, location)
+	}
+
+	putReq, err := http.NewRequestWithContext(ctx, http.MethodPut, location, bytes.NewReader(value))
+	if err != nil {
+		return err
+	}
+	putReq.Header.Set("Content-Type", "application/json")
+	putResp, err := c.client.Do(putReq)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = putResp.Body.Close() }()
+	if putResp.StatusCode < 200 || putResp.StatusCode >= 300 {
+		return fmt.Errorf("write status=%s", putResp.Status)
+	}
+	return nil
+}
+
+func (c *webHDFSClient) operationURL(hdfsPath, operation string, extra url.Values) string {
+	values := url.Values{"op": {operation}, "user.name": {c.user}}
+	for key, vals := range extra {
+		for _, val := range vals {
+			values.Add(key, val)
+		}
+	}
+	return fmt.Sprintf("%s/webhdfs/v1%s?%s", c.baseURL, hdfsPath, values.Encode())
 }
 
 func appendJSONL(baseDir, dataset string, value []byte) error {

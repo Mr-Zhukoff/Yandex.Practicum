@@ -17,7 +17,8 @@ The current slice includes:
   - Kafka TLS/mTLS and ACL configuration,
   - replicated topics with `min.insync.replicas=2`,
   - PostgreSQL,
-  - HDFS-compatible local data lake directory (`data-lake/`),
+  - HDFS namenode/datanode plus local `data-lake/` mirror for debugging,
+  - Spark master/worker and Spark recommendation job,
   - Prometheus, Grafana, Alertmanager and Kafka JMX metrics,
   - topic initialization.
 - Go services:
@@ -26,9 +27,9 @@ The current slice includes:
   - `services/product-filter` — Goka stream processor that consumes raw products and writes allowed/rejected/DLQ topics.
   - `services/postgres-sink` — consumes allowed products and upserts them to PostgreSQL.
   - `services/client-api` — terminal search/recommend commands.
-  - `services/hdfs-ingestor` — consumes mirrored analytics topics from the secondary Kafka cluster, writes JSONL datasets to `data-lake/`, calculates simple category recommendations and writes them to `analytics.recommendations`.
+  - `services/hdfs-ingestor` — consumes mirrored analytics topics from the secondary Kafka cluster and writes JSON datasets to HDFS via WebHDFS plus a local JSONL mirror in `data-lake/`.
 
-The analytics implementation uses a local mounted JSONL data lake as the HDFS-compatible storage layer for the Docker Compose demo. The directory structure is partitioned by dataset and date and can be copied to real HDFS or read by Spark as JSON Lines.
+The Spark analytics job reads allowed product events from HDFS, calculates simple category recommendations and writes results back to the secondary Kafka topic `analytics.recommendations`.
 
 ## Start infrastructure
 
@@ -165,10 +166,10 @@ Start long-running application services:
 docker compose --profile app up -d --build
 ```
 
-Start analytics ingestion/recommendation worker explicitly:
+Start HDFS, Spark and the analytics ingestion worker explicitly:
 
 ```bash
-docker compose --profile analytics up -d --build hdfs-ingestor
+docker compose --profile analytics up -d --build namenode datanode spark-master spark-worker hdfs-ingestor
 ```
 
 It reads from the secondary Kafka cluster:
@@ -177,20 +178,41 @@ It reads from the secondary Kafka cluster:
 - `client.search.requests`
 - `client.recommendation.requests`
 
-It writes JSONL datasets to:
+It writes datasets to HDFS under:
+
+```text
+hdfs://namenode:8020/marketplace-analytics/products_allowed/YYYY-MM-DD/*.json
+hdfs://namenode:8020/marketplace-analytics/search_requests/YYYY-MM-DD/*.json
+hdfs://namenode:8020/marketplace-analytics/recommendation_requests/YYYY-MM-DD/*.json
+```
+
+and mirrors them locally for debugging:
 
 ```text
 data-lake/products_allowed/YYYY-MM-DD.jsonl
 data-lake/search_requests/YYYY-MM-DD.jsonl
 data-lake/recommendation_requests/YYYY-MM-DD.jsonl
-data-lake/recommendations/YYYY-MM-DD.jsonl
 ```
 
-and publishes calculated recommendations to:
+Run the Spark recommendation job after product data has been mirrored and ingested:
+
+```bash
+docker compose --profile analytics --profile analytics-jobs run --rm spark-recommendations
+```
+
+Spark writes recommendation JSON to HDFS under:
+
+```text
+hdfs://namenode:8020/marketplace-analytics/spark_recommendations
+```
+
+and publishes calculated recommendations to Kafka:
 
 ```text
 analytics.recommendations
 ```
+
+HDFS UI is available at http://localhost:9870. Spark UI is available at http://localhost:8080.
 
 Seed the forbidden list through a one-shot Compose job:
 
@@ -249,10 +271,11 @@ Check analytics output:
 
 ```bash
 ls data-lake
-docker exec marketplace-kafka2-1 kafka-console-consumer.sh \
+docker compose exec namenode hdfs dfs -ls -R /marketplace-analytics
+docker compose exec kafka2-1 bash -lc 'unset KAFKA_OPTS; /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server kafka2-1:29092,kafka2-2:29092,kafka2-3:29092 \
   --consumer.config /opt/bitnami/kafka/config/certs/admin-ssl.properties \
   --topic analytics.recommendations \
   --from-beginning \
-  --timeout-ms 5000
+  --timeout-ms 5000'
 ```

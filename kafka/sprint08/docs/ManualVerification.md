@@ -11,7 +11,7 @@
 - PostgreSQL sink;
 - CLIENT API;
 - PostgreSQL search;
-- analytics / HDFS-compatible data lake;
+- analytics / HDFS / Spark data lake;
 - recommendation topic;
 - Prometheus, Grafana, Alertmanager, Kafka JMX metrics.
 
@@ -470,24 +470,28 @@ docker compose exec kafka2-1 kafka-console-consumer.sh \
 
 ---
 
-## 14. Проверить analytics / HDFS-compatible data lake
+## 14. Проверить analytics / HDFS / Spark data lake
 
-Запустить analytics worker:
+Запустить HDFS, Spark и analytics worker:
 
 ```bash
-docker compose --profile analytics up -d --build hdfs-ingestor
+docker compose --profile analytics up -d --build namenode datanode spark-master spark-worker hdfs-ingestor
 ```
 
 Проверить статус:
 
 ```bash
-docker compose --profile analytics ps hdfs-ingestor
+docker compose --profile analytics ps namenode datanode spark-master spark-worker hdfs-ingestor
 ```
 
 Ожидаемо:
 
 ```text
 marketplace-hdfs-ingestor ... Up
+marketplace-hdfs-namenode ... Up
+marketplace-hdfs-datanode ... Up
+marketplace-spark-master ... Up
+marketplace-spark-worker ... Up
 ```
 
 Проверить логи:
@@ -502,7 +506,7 @@ docker compose logs --tail 100 hdfs-ingestor
 analytics hdfs-ingestor started
 ```
 
-После отправки товаров через `shop-api` и ожидания MirrorMaker 10–20 секунд должны появиться JSONL-датасеты:
+После отправки товаров через `shop-api` и ожидания MirrorMaker 10–20 секунд должны появиться локальные JSONL-датасеты:
 
 ```bash
 ls -R data-lake
@@ -512,8 +516,20 @@ ls -R data-lake
 
 ```text
 data-lake/products_allowed/
-data-lake/recommendations/
 data-lake/search_requests/
+```
+
+Проверить датасеты в HDFS:
+
+```bash
+docker compose exec namenode hdfs dfs -ls -R /marketplace-analytics
+```
+
+Ожидаемо есть файлы вида:
+
+```text
+/marketplace-analytics/products_allowed/YYYY-MM-DD/*.json
+/marketplace-analytics/search_requests/YYYY-MM-DD/*.json
 ```
 
 Проверить содержимое разрешённых товаров:
@@ -524,17 +540,24 @@ cat data-lake/products_allowed/*.jsonl
 
 Ожидаемо есть `watch-001` и `phone-001`, но нет `forbidden-001`.
 
-Проверить рассчитанные рекомендации:
+Запустить Spark job для расчёта рекомендаций из HDFS:
 
 ```bash
-cat data-lake/recommendations/*.jsonl
+docker compose --profile analytics --profile analytics-jobs run --rm spark-recommendations
 ```
 
-Ожидаемо есть события вида:
+Проверить результат Spark в HDFS:
+
+```bash
+docker compose exec namenode hdfs dfs -ls -R /marketplace-analytics/spark_recommendations
+docker compose exec namenode hdfs dfs -cat '/marketplace-analytics/spark_recommendations/part-*'
+```
+
+Ожидаемо есть JSON-события вида:
 
 ```text
 "event_type":"recommendations_calculated"
-"source":"hdfs-ingestor"
+"source":"spark-recommendations"
 "category":"Электроника"
 ```
 
@@ -737,7 +760,7 @@ docker compose start kafka3
 go test ./...
 docker compose config
 docker compose --profile app --profile jobs config
-docker compose --profile app --profile analytics --profile monitoring config
+docker compose --profile app --profile analytics --profile analytics-jobs --profile monitoring config
 ```
 
 Ожидаемо: команды завершаются без ошибок.
@@ -771,8 +794,8 @@ docker compose down -v --remove-orphans
 7. PostgreSQL содержит только разрешённые товары.
 8. `client-api search` возвращает товар.
 9. MirrorMaker переносит `shop.products.allowed` и `client.search.requests` во второй кластер.
-10. `hdfs-ingestor` пишет JSONL в `data-lake/`.
-11. `analytics.recommendations` содержит рассчитанные рекомендации.
+10. `hdfs-ingestor` пишет JSONL в `data-lake/` и JSON-файлы в HDFS.
+11. Spark читает данные из HDFS и `analytics.recommendations` содержит рассчитанные рекомендации.
 12. Prometheus targets находятся в состоянии `up`.
 13. Grafana открывается и показывает dashboard `Marketplace Kafka Overview`.
 14. Alertmanager запущен и получает правила из Prometheus.
