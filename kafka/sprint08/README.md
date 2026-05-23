@@ -1,281 +1,318 @@
 # Marketplace Analytics Platform
 
-Implementation of the final Kafka project described in `docs/Task.md`.
+Аналитическая платформа для маркетплейса «Покупай выгодно». Проект собирает данные о товарах и действиях клиентов, фильтрует запрещённые товары, сохраняет данные в HDFS и PostgreSQL, рассчитывает рекомендации через Spark и предоставляет мониторинг инфраструктуры.
 
-The target architecture is documented in `docs/ImplementationPlan.md`.
+Реализация итогового проекта курса по Apache Kafka (`docs/Task.md`).
 
-## Current implementation slice
+---
 
-The current slice includes:
+## Быстрый старт
 
-- Go module and shared event contracts.
-- Sample product and forbidden-product data.
-- Local Docker Compose baseline with:
-  - three-broker Kafka KRaft cluster,
-  - secondary three-broker Kafka KRaft cluster for analytics,
-  - MirrorMaker 2 topic replication from primary to secondary,
-  - Kafka TLS/mTLS and ACL configuration,
-  - replicated topics with `min.insync.replicas=2`,
-  - PostgreSQL,
-  - HDFS namenode/datanode plus local `data-lake/` mirror for debugging,
-  - Spark master/worker and Spark recommendation job,
-  - Prometheus, Grafana, Alertmanager and Kafka JMX metrics,
-  - topic initialization.
-- Go services:
-  - `services/shop-api` — reads `data/products.json` and writes product events to Kafka.
-  - `services/forbidden-cli` — writes and lists forbidden-product state updates in Kafka.
-  - `services/product-filter` — Goka stream processor that consumes raw products and writes allowed/rejected/DLQ topics.
-  - `services/postgres-sink` — consumes allowed products and upserts them to PostgreSQL.
-  - `services/client-api` — terminal search/recommend commands.
-  - `services/hdfs-ingestor` — consumes mirrored analytics topics from the secondary Kafka cluster and writes JSON datasets to HDFS via WebHDFS plus a local JSONL mirror in `data-lake/`.
+Одна команда для полного end-to-end прогона:
 
-The Spark analytics job reads allowed product events from HDFS, calculates simple category recommendations and writes results back to the secondary Kafka topic `analytics.recommendations`.
+```bash
+./scripts/demo.sh
+```
 
-## Start infrastructure
+Скрипт последовательно: сгенерирует TLS-сертификаты, загрузит JMX-агент, поднимет оба Kafka-кластера, PostgreSQL, HDFS, Spark, сервисы фильтрации и загрузки данных, засеет тестовые данные, запустит Spark-рекомендации и мониторинг.
 
-Generate local development certificates first:
+Пошаговый ручной запуск описан ниже в разделе «Запуск».
+
+Инструкция по пошаговой проверке в отдельном файле docs\ImplemetationPlan.md
+
+---
+
+## Использованные технологии
+
+| Компонент | Технология | Назначение | Почему выбрана |
+|-----------|-----------|------------|----------------|
+| **Event bus** | Apache Kafka 3.8 (KRaft) | Передача событий между сервисами | Требование проекта. KRaft — без ZooKeeper, проще в развёртывании |
+| **Безопасность** | TLS/mTLS + ACL | Шифрование данных и разграничение доступа к топикам | Требование проекта. Каждый сервис имеет собственный сертификат и ограниченный набор прав |
+| **Потоковая обработка** | Goka (Go) | Фильтрация запрещённых товаров в реальном времени | Выбрана из трёх вариантов (Kafka Streams, Faust, Goka). Goka нативна для Go-стека проекта, не требует JVM, встраивается в бинарник сервиса |
+| **Репликация** | MirrorMaker 2 | Дублирование данных между кластерами | Требование проекта. Нативное решение Kafka, поддерживает offset-синхронизацию и heartbeat |
+| **Хранилище / поиск** | PostgreSQL 16 | Хранение товаров и полнотекстовый поиск | Выбран расширенный вариант вместо Elasticsearch. PostgreSQL покрывает требования поиска через `tsvector`, не требует отдельного кластера, проще в эксплуатации |
+| **Data Lake** | HDFS 3.2.1 | Хранение аналитических данных | Требование проекта. Обеспечивает отказоустойчивое хранение для пакетной обработки Spark |
+| **Аналитика** | Apache Spark 3.5.1 | Пакетный расчёт рекомендаций | Требование проекта. Читает данные из HDFS, вычисляет top-5 товаров по категориям, пишет результат в Kafka |
+| **Мониторинг** | Prometheus + Grafana + Alertmanager | Сбор метрик, дашборды, алерты | Требование проекта. JMX Exporter собирает метрики Kafka, Grafana отображает статус брокеров и throughput, Alertmanager оповещает о падении брокеров |
+| **Сервисы** | Go 1.23 | Все микросервисы | Единый язык для всего проекта, компиляция в статические бинарники, минимальные образы Docker |
+| **Инфраструктура** | Docker Compose | Оркестрация всех сервисов | Всё окружение в одном `docker-compose.yml`, воспроизводимо на любой машине |
+
+---
+
+## Архитектура
+
+```mermaid
+flowchart LR
+    subgraph sources["Источники данных"]
+        shop["SHOP API<br/>(Go)"]
+        client["CLIENT API<br/>(Go)"]
+    end
+
+    subgraph kafka1["Apache Kafka — Primary Cluster"]
+        raw["shop.products.raw"]
+        allowed["shop.products.allowed"]
+        rejected["shop.products.rejected"]
+        dlq["shop.products.dlq"]
+        forbidden["forbidden.products.state<br/>(compacted)"]
+        search_req["client.search.requests"]
+        rec_req["client.recommendation.requests"]
+    end
+
+    subgraph processors["Обработка"]
+        goka["Product Filter<br/>(Goka stream processor)"]
+        pg_sink["PostgreSQL Sink<br/>(Go consumer)"]
+        forbidden_cli["Forbidden CLI<br/>(Go)"]
+    end
+
+    subgraph storage["Хранилище"]
+        pg[("PostgreSQL<br/>products + поиск")]
+    end
+
+    mirror["MirrorMaker 2"]
+
+    subgraph kafka2["Apache Kafka — Secondary Cluster"]
+        allowed2["shop.products.allowed"]
+        search2["client.search.requests"]
+        rec2["client.recommendation.requests"]
+        rec_out["analytics.recommendations<br/>(compacted)"]
+    end
+
+    subgraph analytics["Аналитика"]
+        hdfs_ingest["HDFS Ingestor<br/>(Go consumer)"]
+        hdfs[("HDFS<br/>Data Lake")]
+        spark["Spark<br/>Recommendations"]
+    end
+
+    subgraph monitoring["Мониторинг"]
+        prom["Prometheus"]
+        grafana["Grafana"]
+        alert["Alertmanager"]
+    end
+
+    shop -->|"пишет product events"| raw
+    forbidden_cli -->|"add / remove / list"| forbidden
+    raw -->|"читает"| goka
+    forbidden -->|"lookup"| goka
+    goka -->|"allowed"| allowed
+    goka -->|"rejected"| rejected
+    goka -->|"invalid"| dlq
+    allowed -->|"читает"| pg_sink
+    pg_sink -->|"upsert"| pg
+    client -->|"search / recommend"| search_req
+    client -->|"search / recommend"| rec_req
+    client -->|"читает"| pg
+
+    allowed --> mirror
+    search_req --> mirror
+    rec_req --> mirror
+
+    mirror -->|"реплицирует"| allowed2
+    mirror -->|"реплицирует"| search2
+    mirror -->|"реплицирует"| rec2
+
+    allowed2 -->|"читает"| hdfs_ingest
+    search2 -->|"читает"| hdfs_ingest
+    rec2 -->|"читает"| hdfs_ingest
+    hdfs_ingest -->|"пишет JSON"| hdfs
+    hdfs -->|"читает"| spark
+    spark -->|"пишет рекомендации"| rec_out
+
+    kafka1 -->|"JMX метрики"| prom
+    kafka2 -->|"JMX метрики"| prom
+    prom --> grafana
+    prom -->|"алерты"| alert
+
+    classDef source fill:#f3f3f3,stroke:#333,color:#111
+    classDef kafka fill:#aa98f5,stroke:#5c4db1,color:#fff
+    classDef processor fill:#47bf70,stroke:#2d8a4e,color:#111
+    classDef storage fill:#ffcc16,stroke:#cc9900,color:#111
+    classDef analytics fill:#ff8738,stroke:#cc6600,color:#111
+    classDef monitor fill:#ef3b2d,stroke:#b52018,color:#fff
+    classDef infra fill:#e6e6e6,stroke:#999,color:#111
+
+    class shop,client source
+    class raw,allowed,rejected,dlq,forbidden,search_req,rec_req,allowed2,search2,rec2,rec_out kafka
+    class goka,pg_sink,forbidden_cli processor
+    class pg storage
+    class hdfs_ingest,hdfs,spark analytics
+    class prom,grafana,alert monitor
+    class mirror infra
+```
+
+### Поток данных
+
+1. **SHOP API** читает `data/products.json` и публикует события в `shop.products.raw`
+2. **Product Filter** (Goka) проверяет каждый товар по `forbidden.products.state`: разрешённые → `shop.products.allowed`, запрещённые → `shop.products.rejected`, невалидные → `shop.products.dlq`
+3. **PostgreSQL Sink** пишет разрешённые товары в PostgreSQL с полнотекстовым индексом
+4. **CLIENT API** ищет товары через PostgreSQL и публикует события поиска/рекомендаций в Kafka
+5. **MirrorMaker 2** реплицирует `shop.products.allowed`, `client.search.requests`, `client.recommendation.requests` во второй кластер
+6. **HDFS Ingestor** читает из второго кластера и сохраняет данные в HDFS + локальный `data-lake/`
+7. **Spark** читает товары из HDFS, вычисляет top-5 по категориям (score = доступный сток / 100), пишет результат в `analytics.recommendations`
+
+---
+
+## Запуск
+
+### 1. Сертификаты и JMX-агент
 
 ```bash
 ./scripts/generate-certs.sh
+./scripts/download-jmx-agent.sh
 ```
+
+### 2. Инфраструктура
+
+Поднять оба кластера Kafka, PostgreSQL, HDFS и Spark:
 
 ```bash
-docker compose up -d kafka1 kafka2 kafka3 kafka2-1 kafka2-2 kafka2-3 postgres kafka-init kafka2-init kafka-acls kafka2-acls mirror-maker
+docker compose --profile app --profile analytics up -d --build
 ```
 
-Kafka is exposed in two ways:
+Это запускает: 6 брокеров Kafka, создание топиков и ACL, MirrorMaker 2, PostgreSQL, HDFS (namenode + datanode), Spark (master + worker), product-filter, postgres-sink, hdfs-ingestor.
 
-- from the host: `localhost:9092`
-- from Docker containers: `kafka1:29092,kafka2:29092,kafka3:29092`
-
-Host broker ports:
-
-Primary cluster:
-
-- broker 1: `localhost:9092`
-- broker 2: `localhost:9094`
-- broker 3: `localhost:9096`
-
-Secondary analytics cluster:
-
-- broker 1: `localhost:9192`
-- broker 2: `localhost:9194`
-- broker 3: `localhost:9196`
-
-MirrorMaker 2 replicates these primary topics to the secondary cluster:
-
-- `shop.products.allowed`
-- `client.search.requests`
-- `client.recommendation.requests`
-- `analytics.recommendations`
-
-## Run local pipeline
-
-In separate terminals:
+### 3. Сидирование данных
 
 ```bash
-go run ./services/forbidden-cli add \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/admin.crt \
-  --tls-client-key ./configs/kafka/certs/admin.key \
-  --tls-server-name localhost \
-  --product-id forbidden-001 \
-  --reason "Seed product used to verify filtering"
+docker compose --profile jobs run --rm forbidden-cli
+docker compose --profile jobs run --rm shop-api
+docker compose --profile jobs run --rm client-api
 ```
 
-List active forbidden products:
+### 4. Spark-рекомендации
 
-```bash
-go run ./services/forbidden-cli list \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/admin.crt \
-  --tls-client-key ./configs/kafka/certs/admin.key \
-  --tls-server-name localhost
-```
-
-```bash
-go run ./services/product-filter \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/product-filter.crt \
-  --tls-client-key ./configs/kafka/certs/product-filter.key \
-  --tls-server-name localhost
-```
-
-```bash
-go run ./services/postgres-sink \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/postgres-sink.crt \
-  --tls-client-key ./configs/kafka/certs/postgres-sink.key \
-  --tls-server-name localhost
-```
-
-Then send products:
-
-```bash
-go run ./services/shop-api \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/shop-api.crt \
-  --tls-client-key ./configs/kafka/certs/shop-api.key \
-  --tls-server-name localhost \
-  --file ./data/products.json
-```
-
-Search products:
-
-```bash
-go run ./services/client-api search \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/client-api.crt \
-  --tls-client-key ./configs/kafka/certs/client-api.key \
-  --tls-server-name localhost \
-  --user-id user_001 \
-  --query "умные часы"
-```
-
-Request recommendations:
-
-```bash
-go run ./services/client-api recommend \
-  --brokers localhost:9092,localhost:9094,localhost:9096 \
-  --tls \
-  --tls-ca-cert ./configs/kafka/certs/ca.crt \
-  --tls-client-cert ./configs/kafka/certs/client-api.crt \
-  --tls-client-key ./configs/kafka/certs/client-api.key \
-  --tls-server-name localhost \
-  --user-id user_001 \
-  --category "Электроника"
-```
-
-## Run with Docker Compose profiles
-
-Start long-running application services:
-
-```bash
-docker compose --profile app up -d --build
-```
-
-Start HDFS, Spark and the analytics ingestion worker explicitly:
-
-```bash
-docker compose --profile analytics up -d --build namenode datanode spark-master spark-worker hdfs-ingestor
-```
-
-It reads from the secondary Kafka cluster:
-
-- `shop.products.allowed`
-- `client.search.requests`
-- `client.recommendation.requests`
-
-It writes datasets to HDFS under:
-
-```text
-hdfs://namenode:8020/marketplace-analytics/products_allowed/YYYY-MM-DD/*.json
-hdfs://namenode:8020/marketplace-analytics/search_requests/YYYY-MM-DD/*.json
-hdfs://namenode:8020/marketplace-analytics/recommendation_requests/YYYY-MM-DD/*.json
-```
-
-and mirrors them locally for debugging:
-
-```text
-data-lake/products_allowed/YYYY-MM-DD.jsonl
-data-lake/search_requests/YYYY-MM-DD.jsonl
-data-lake/recommendation_requests/YYYY-MM-DD.jsonl
-```
-
-Run the Spark recommendation job after product data has been mirrored and ingested:
+Дождаться репликации MirrorMaker (≈15 секунд), затем:
 
 ```bash
 docker compose --profile analytics --profile analytics-jobs run --rm spark-recommendations
 ```
 
-Spark writes recommendation JSON to HDFS under:
-
-```text
-hdfs://namenode:8020/marketplace-analytics/spark_recommendations
-```
-
-and publishes calculated recommendations to Kafka:
-
-```text
-analytics.recommendations
-```
-
-HDFS UI is available at http://localhost:9870. Spark UI is available at http://localhost:8080.
-
-Seed the forbidden list through a one-shot Compose job:
-
-```bash
-docker compose --profile jobs run --rm forbidden-cli
-```
-
-Send sample products through a one-shot Compose job:
-
-```bash
-docker compose --profile jobs run --rm shop-api
-```
-
-Run a sample client search through a one-shot Compose job:
-
-```bash
-docker compose --profile jobs run --rm client-api
-```
-
-## Monitoring
-
-Download the JMX Prometheus Java agent if it is missing:
-
-```bash
-./scripts/download-jmx-agent.sh
-```
-
-Start monitoring:
+### 5. Мониторинг
 
 ```bash
 docker compose --profile monitoring up -d
 ```
 
-Endpoints:
+### 6. Верификация
 
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (`admin` / `admin`)
-- Alertmanager: http://localhost:9093
+```bash
+# Локальные JSONL-файлы
+ls -R data-lake/
 
-Grafana provisions the `Marketplace Kafka Overview` dashboard automatically. Prometheus scrapes Kafka JMX exporter endpoints and Kafka exporter metrics for both clusters. Alertmanager receives alerts for broker scrape failures and under-replicated partitions.
+# HDFS
+docker compose exec namenode hdfs dfs -ls -R /marketplace-analytics
 
-## Reset local environment
+# Топик рекомендаций
+docker compose exec kafka2-1 bash -lc 'unset KAFKA_OPTS; /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka2-1:29092,kafka2-2:29092,kafka2-3:29092 \
+  --consumer.config /opt/bitnami/kafka/config/certs/admin-ssl.properties \
+  --topic analytics.recommendations --from-beginning --timeout-ms 5000'
+
+# PostgreSQL
+docker compose exec postgres psql -U marketplace -d marketplace \
+  -c "SELECT product_id, name, category, price_amount FROM products ORDER BY name;"
+```
+
+---
+
+## Эндпоинты
+
+| Сервис | URL | Учётные данные |
+|--------|-----|----------------|
+| Primary Kafka brokers | `localhost:9092`, `:9094`, `:9096` | TLS-сертификаты |
+| Secondary Kafka brokers | `localhost:9192`, `:9194`, `:9196` | TLS-сертификаты |
+| PostgreSQL | `localhost:5432` | `marketplace` / `marketplace` |
+| HDFS UI | http://localhost:9870 | — |
+| Spark UI | http://localhost:8080 | — |
+| Prometheus | http://localhost:9090 | — |
+| Grafana | http://localhost:3000 | `admin` / `admin` |
+| Alertmanager | http://localhost:9093 | — |
+
+---
+
+## Топики Kafka
+
+| Топик | Кластер | cleanup.policy | Назначение |
+|-------|---------|----------------|------------|
+| `shop.products.raw` | Primary | delete | Сырые события товаров от магазинов |
+| `shop.products.allowed` | Primary | delete | Только разрешённые товары |
+| `shop.products.rejected` | Primary | delete | Запрещённые товары (аудит) |
+| `shop.products.dlq` | Primary | delete | Невалидные события |
+| `client.search.requests` | Primary | delete | Поисковые запросы клиентов |
+| `client.recommendation.requests` | Primary | delete | Запросы рекомендаций |
+| `forbidden.products.state` | Primary | compact | Состояние запрещённых товаров |
+| `analytics.recommendations` | Secondary | compact | Рассчитанные рекомендации |
+
+Все топики: `replication.factor=3`, `min.insync.replicas=2`, `partitions=3`.
+
+---
+
+## Модель ACL
+
+| Принципал (CN) | Операции |
+|----------------|----------|
+| `shop-api` | Write `shop.products.raw` |
+| `product-filter` | Read `shop.products.raw` + `forbidden.products.state`; Write `shop.products.allowed/.rejected/.dlq` |
+| `postgres-sink` | Read `shop.products.allowed` |
+| `client-api` | Write `client.search.requests` + `client.recommendation.requests`; Read `analytics.recommendations` |
+| `admin` | Write/Read `forbidden.products.state` |
+| `mirror-maker` | Read/Write все топики + Create |
+
+---
+
+## Структура проекта
+
+```
+.
+├── analytics/
+│   └── spark-recommendations/   # PySpark-джоба расчёта рекомендаций
+├── configs/
+│   ├── alertmanager/            # Конфигурация Alertmanager
+│   ├── grafana/                 # Дашборды и provisioning
+│   ├── hadoop/                  # core-site.xml для HDFS
+│   ├── jmx/                     # JMX Exporter agent + конфиг
+│   ├── kafka/                   # Сертификаты, mm2.properties
+│   ├── postgres/                # SQL-схема
+│   └── prometheus/              # Конфигурация, правила алертов
+├── data/
+│   ├── products.json            # Тестовые товары
+│   └── forbidden-products.seed.json
+├── data-lake/                   # Локальное зеркало HDFS
+├── docs/
+│   ├── Task.md                  # Исходное задание
+│   └── ImplementationPlan.md    # План реализации
+├── internal/
+│   ├── events/                  # Go-структуры событий и валидация
+│   ├── gokautil/                # Утилиты для Goka
+│   ├── kafkautil/               # Kafka-клиенты с TLS
+│   ├── postgres/                # SQL-схема (schema.sql)
+│   └── productio/               # Чтение products.json
+├── scripts/
+│   ├── create-acls.sh           # Создание ACL
+│   ├── create-topics.sh         # Создание топиков
+│   ├── demo.sh                  # Автоматический end-to-end прогон
+│   ├── download-jmx-agent.sh    # Загрузка JMX-агента
+│   ├── generate-certs.sh        # Генерация TLS-сертификатов
+│   └── reset.sh                 # Полный сброс окружения
+├── services/
+│   ├── client-api/              # CLI: search, recommend
+│   ├── forbidden-cli/           # CLI: add, remove, list запрещённых
+│   ├── hdfs-ingestor/           # Kafka → HDFS + data-lake
+│   ├── postgres-sink/           # Kafka → PostgreSQL
+│   ├── product-filter/          # Goka-фильтр запрещённых товаров
+│   └── shop-api/                # Отправка товаров в Kafka
+├── docker-compose.yml
+├── Dockerfile
+├── go.mod
+├── go.sum
+└── README.md
+```
+
+---
+
+## Сброс окружения
 
 ```bash
 ./scripts/reset.sh
 ```
 
-## Validation
-
-```bash
-go test ./...
-docker compose config
-```
-
-Check analytics output:
-
-```bash
-ls data-lake
-docker compose exec namenode hdfs dfs -ls -R /marketplace-analytics
-docker compose exec kafka2-1 bash -lc 'unset KAFKA_OPTS; /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server kafka2-1:29092,kafka2-2:29092,kafka2-3:29092 \
-  --consumer.config /opt/bitnami/kafka/config/certs/admin-ssl.properties \
-  --topic analytics.recommendations \
-  --from-beginning \
-  --timeout-ms 5000'
-```
+Удаляет все контейнеры, тома и сгенерированные сертификаты.
