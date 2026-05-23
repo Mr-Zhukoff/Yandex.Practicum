@@ -39,8 +39,11 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx/kafka.yml"
     volumes:
       - kafka1-data:/bitnami/kafka
+      - ./configs/jmx/jmx_prometheus_javaagent.jar:/opt/jmx/jmx_prometheus_javaagent.jar:ro
+      - ./configs/jmx/kafka.yml:/opt/jmx/kafka.yml:ro
       - ./configs/kafka/certs/kafka1.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
       - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
       - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
@@ -48,7 +51,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "unset KAFKA_OPTS; kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -91,8 +94,11 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx/kafka.yml"
     volumes:
       - kafka2-data:/bitnami/kafka
+      - ./configs/jmx/jmx_prometheus_javaagent.jar:/opt/jmx/jmx_prometheus_javaagent.jar:ro
+      - ./configs/jmx/kafka.yml:/opt/jmx/kafka.yml:ro
       - ./configs/kafka/certs/kafka2.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
       - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
       - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
@@ -100,7 +106,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "unset KAFKA_OPTS; kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -143,8 +149,11 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx/kafka.yml"
     volumes:
       - kafka3-data:/bitnami/kafka
+      - ./configs/jmx/jmx_prometheus_javaagent.jar:/opt/jmx/jmx_prometheus_javaagent.jar:ro
+      - ./configs/jmx/kafka.yml:/opt/jmx/kafka.yml:ro
       - ./configs/kafka/certs/kafka3.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
       - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
       - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
@@ -152,7 +161,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "unset KAFKA_OPTS; kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -195,8 +204,11 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx/kafka.yml"
     volumes:
       - kafka2-1-data:/bitnami/kafka
+      - ./configs/jmx/jmx_prometheus_javaagent.jar:/opt/jmx/jmx_prometheus_javaagent.jar:ro
+      - ./configs/jmx/kafka.yml:/opt/jmx/kafka.yml:ro
       - ./configs/kafka/certs/kafka2-1.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
       - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
       - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
@@ -204,7 +216,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "unset KAFKA_OPTS; kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -247,8 +259,11 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx/kafka.yml"
     volumes:
       - kafka2-2-data:/bitnami/kafka
+      - ./configs/jmx/jmx_prometheus_javaagent.jar:/opt/jmx/jmx_prometheus_javaagent.jar:ro
+      - ./configs/jmx/kafka.yml:/opt/jmx/kafka.yml:ro
       - ./configs/kafka/certs/kafka2-2.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
       - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
       - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
@@ -256,7 +271,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "unset KAFKA_OPTS; kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -299,8 +314,11 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_OPTS: "-javaagent:/opt/jmx/jmx_prometheus_javaagent.jar=7071:/opt/jmx/kafka.yml"
     volumes:
       - kafka2-3-data:/bitnami/kafka
+      - ./configs/jmx/jmx_prometheus_javaagent.jar:/opt/jmx/jmx_prometheus_javaagent.jar:ro
+      - ./configs/jmx/kafka.yml:/opt/jmx/kafka.yml:ro
       - ./configs/kafka/certs/kafka2-3.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
       - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
       - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
@@ -308,7 +326,7 @@ services:
     networks:
       - app-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "unset KAFKA_OPTS; kafka-topics.sh --bootstrap-server localhost:29092 --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties --list >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -466,6 +484,124 @@ services:
     networks:
       - app-net
 
+  hdfs-ingestor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: services/hdfs-ingestor
+    container_name: marketplace-hdfs-ingestor
+    restart: unless-stopped
+    profiles: ["app", "analytics"]
+    depends_on:
+      kafka2-acls:
+        condition: service_completed_successfully
+    command:
+      - "--brokers"
+      - "kafka2-1:29092,kafka2-2:29092,kafka2-3:29092"
+      - "--tls"
+      - "--tls-ca-cert"
+      - "/certs/ca.crt"
+      - "--tls-client-cert"
+      - "/certs/admin.crt"
+      - "--tls-client-key"
+      - "/certs/admin.key"
+      - "--data-dir"
+      - "/data/hdfs"
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
+      - ./data-lake:/data/hdfs
+    networks:
+      - app-net
+
+  kafka-exporter-primary:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: marketplace-kafka-exporter-primary
+    profiles: ["monitoring"]
+    depends_on:
+      kafka-acls:
+        condition: service_completed_successfully
+    command:
+      - "--kafka.server=kafka1:29092"
+      - "--kafka.server=kafka2:29092"
+      - "--kafka.server=kafka3:29092"
+      - "--tls.enabled"
+      - "--tls.ca-file=/certs/ca.crt"
+      - "--tls.cert-file=/certs/admin.crt"
+      - "--tls.key-file=/certs/admin.key"
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
+    networks:
+      - app-net
+
+  kafka-exporter-secondary:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: marketplace-kafka-exporter-secondary
+    profiles: ["monitoring"]
+    depends_on:
+      kafka2-acls:
+        condition: service_completed_successfully
+    command:
+      - "--kafka.server=kafka2-1:29092"
+      - "--kafka.server=kafka2-2:29092"
+      - "--kafka.server=kafka2-3:29092"
+      - "--tls.enabled"
+      - "--tls.ca-file=/certs/ca.crt"
+      - "--tls.cert-file=/certs/admin.crt"
+      - "--tls.key-file=/certs/admin.key"
+    volumes:
+      - ./configs/kafka/certs:/certs:ro
+    networks:
+      - app-net
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: marketplace-prometheus
+    profiles: ["monitoring"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - alertmanager
+      - kafka-exporter-primary
+      - kafka-exporter-secondary
+    networks:
+      - app-net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: marketplace-alertmanager
+    profiles: ["monitoring"]
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./configs/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - app-net
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: marketplace-grafana
+    profiles: ["monitoring"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - app-net
+
   shop-api:
     build:
       context: .
@@ -532,3 +668,4 @@ volumes:
   kafka2-2-data:
   kafka2-3-data:
   postgres-data:
+  grafana-data:

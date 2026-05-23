@@ -1,0 +1,3 @@
+configs/jmx/jmx_prometheus_javaagent.jar
+data-lake/*
+!data-lake/.gitkeep

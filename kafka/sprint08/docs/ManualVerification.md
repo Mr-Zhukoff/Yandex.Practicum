@@ -10,7 +10,10 @@
 - Goka-фильтр;
 - PostgreSQL sink;
 - CLIENT API;
-- PostgreSQL search.
+- PostgreSQL search;
+- analytics / HDFS-compatible data lake;
+- recommendation topic;
+- Prometheus, Grafana, Alertmanager, Kafka JMX metrics.
 
 ---
 
@@ -24,6 +27,7 @@ docker compose
 go
 openssl
 keytool
+curl
 ```
 
 Проверить:
@@ -34,6 +38,7 @@ docker compose version
 go version
 openssl version
 keytool -help
+curl --version
 ```
 
 ---
@@ -465,7 +470,204 @@ docker compose exec kafka2-1 kafka-console-consumer.sh \
 
 ---
 
-## 14. Проверить ACL негативным тестом
+## 14. Проверить analytics / HDFS-compatible data lake
+
+Запустить analytics worker:
+
+```bash
+docker compose --profile analytics up -d --build hdfs-ingestor
+```
+
+Проверить статус:
+
+```bash
+docker compose --profile analytics ps hdfs-ingestor
+```
+
+Ожидаемо:
+
+```text
+marketplace-hdfs-ingestor ... Up
+```
+
+Проверить логи:
+
+```bash
+docker compose logs --tail 100 hdfs-ingestor
+```
+
+Ожидаемо:
+
+```text
+analytics hdfs-ingestor started
+```
+
+После отправки товаров через `shop-api` и ожидания MirrorMaker 10–20 секунд должны появиться JSONL-датасеты:
+
+```bash
+ls -R data-lake
+```
+
+Ожидаемо есть директории:
+
+```text
+data-lake/products_allowed/
+data-lake/recommendations/
+data-lake/search_requests/
+```
+
+Проверить содержимое разрешённых товаров:
+
+```bash
+cat data-lake/products_allowed/*.jsonl
+```
+
+Ожидаемо есть `watch-001` и `phone-001`, но нет `forbidden-001`.
+
+Проверить рассчитанные рекомендации:
+
+```bash
+cat data-lake/recommendations/*.jsonl
+```
+
+Ожидаемо есть события вида:
+
+```text
+"event_type":"recommendations_calculated"
+"source":"hdfs-ingestor"
+"category":"Электроника"
+```
+
+Проверить, что рекомендации записаны в Kafka topic `analytics.recommendations` во втором кластере:
+
+```bash
+docker compose exec kafka2-1 bash -lc 'unset KAFKA_OPTS; /opt/bitnami/kafka/bin/kafka-get-offsets.sh \
+  --bootstrap-server kafka2-1:29092,kafka2-2:29092,kafka2-3:29092 \
+  --command-config /opt/bitnami/kafka/config/certs/admin-ssl.properties \
+  --topic analytics.recommendations'
+```
+
+Ожидаемо хотя бы у одной partition offset больше `0`, например:
+
+```text
+analytics.recommendations:1:2
+```
+
+Прочитать partition с данными, подставив номер partition, где offset больше `0`:
+
+```bash
+docker compose exec kafka2-1 bash -lc 'unset KAFKA_OPTS; /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka2-1:29092,kafka2-2:29092,kafka2-3:29092 \
+  --consumer.config /opt/bitnami/kafka/config/certs/admin-ssl.properties \
+  --topic analytics.recommendations \
+  --partition 1 \
+  --offset earliest \
+  --timeout-ms 5000'
+```
+
+Ожидаемо выводятся JSON-сообщения с `recommendations_calculated`. `TimeoutException` в конце при использовании `--timeout-ms` допустим: consumer завершился из-за отсутствия новых сообщений.
+
+---
+
+## 15. Проверить мониторинг Kafka
+
+Если JMX agent ещё не скачан:
+
+```bash
+./scripts/download-jmx-agent.sh
+```
+
+Запустить мониторинг:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+Проверить статус:
+
+```bash
+docker compose --profile monitoring ps prometheus grafana alertmanager kafka-exporter-primary kafka-exporter-secondary
+```
+
+Ожидаемо все сервисы `Up`:
+
+```text
+marketplace-prometheus
+marketplace-grafana
+marketplace-alertmanager
+marketplace-kafka-exporter-primary
+marketplace-kafka-exporter-secondary
+```
+
+Проверить Prometheus targets:
+
+```bash
+curl -s 'http://localhost:9090/api/v1/query?query=up'
+```
+
+Ожидаемо в ответе есть targets со значением `1`:
+
+```text
+kafka-jmx-primary
+kafka-jmx-secondary
+kafka-exporter-primary
+kafka-exporter-secondary
+prometheus
+```
+
+Проверить UI:
+
+- Prometheus: <http://localhost:9090>
+- Grafana: <http://localhost:3000>, логин/пароль `admin` / `admin`
+- Alertmanager: <http://localhost:9093>
+
+В Grafana открыть dashboard:
+
+```text
+Dashboards -> Kafka -> Marketplace Kafka Overview
+```
+
+Ожидаемо видны панели:
+
+- Kafka broker scrape status;
+- Under-replicated partitions;
+- Messages in per second.
+
+Проверить алерт-правила Prometheus:
+
+```bash
+curl -s 'http://localhost:9090/api/v1/rules'
+```
+
+Ожидаемо есть правила:
+
+```text
+KafkaBrokerDown
+KafkaUnderReplicatedPartitions
+```
+
+Опциональная проверка алерта `KafkaBrokerDown`:
+
+```bash
+docker compose stop kafka3
+```
+
+Подождать 1–2 минуты, затем открыть:
+
+```text
+http://localhost:9090/alerts
+http://localhost:9093
+```
+
+Ожидаемо алерт переходит в pending/firing. После проверки вернуть брокер:
+
+```bash
+docker compose start kafka3
+```
+
+---
+
+## 16. Проверить ACL негативным тестом
 
 Для полноценного негативного теста нужно создать отдельный client properties для `client-api.keystore.jks`, например:
 
@@ -497,7 +699,7 @@ docker compose exec kafka1 kafka-console-producer.sh \
 
 ---
 
-## 15. Проверить отказоустойчивость Kafka
+## 17. Проверить отказоустойчивость Kafka
 
 Остановить один брокер primary-кластера:
 
@@ -529,19 +731,20 @@ docker compose start kafka3
 
 ---
 
-## 16. Быстрая проверка кода без Docker runtime
+## 18. Быстрая проверка кода без Docker runtime
 
 ```bash
 go test ./...
 docker compose config
 docker compose --profile app --profile jobs config
+docker compose --profile app --profile analytics --profile monitoring config
 ```
 
 Ожидаемо: команды завершаются без ошибок.
 
 ---
 
-## 17. Очистка окружения
+## 19. Очистка окружения
 
 ```bash
 docker compose down -v --remove-orphans
@@ -568,3 +771,8 @@ docker compose down -v --remove-orphans
 7. PostgreSQL содержит только разрешённые товары.
 8. `client-api search` возвращает товар.
 9. MirrorMaker переносит `shop.products.allowed` и `client.search.requests` во второй кластер.
+10. `hdfs-ingestor` пишет JSONL в `data-lake/`.
+11. `analytics.recommendations` содержит рассчитанные рекомендации.
+12. Prometheus targets находятся в состоянии `up`.
+13. Grafana открывается и показывает dashboard `Marketplace Kafka Overview`.
+14. Alertmanager запущен и получает правила из Prometheus.

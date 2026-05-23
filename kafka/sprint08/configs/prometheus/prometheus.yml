@@ -1,0 +1,41 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  - job_name: kafka-jmx-primary
+    static_configs:
+      - targets: ["kafka1:7071", "kafka2:7071", "kafka3:7071"]
+        labels:
+          cluster: primary
+
+  - job_name: kafka-jmx-secondary
+    static_configs:
+      - targets: ["kafka2-1:7071", "kafka2-2:7071", "kafka2-3:7071"]
+        labels:
+          cluster: secondary
+
+  - job_name: kafka-exporter-primary
+    static_configs:
+      - targets: ["kafka-exporter-primary:9308"]
+        labels:
+          cluster: primary
+
+  - job_name: kafka-exporter-secondary
+    static_configs:
+      - targets: ["kafka-exporter-secondary:9308"]
+        labels:
+          cluster: secondary

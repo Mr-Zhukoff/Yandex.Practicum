@@ -1,0 +1,20 @@
+groups:
+  - name: kafka.rules
+    rules:
+      - alert: KafkaBrokerDown
+        expr: up{job=~"kafka-jmx-.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka broker metrics endpoint is down"
+          description: "{{ $labels.instance }} from {{ $labels.cluster }} cluster has not been scraped for more than one minute."
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_replica_manager_underreplicatedpartitions > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka has under-replicated partitions"
+          description: "{{ $labels.instance }} reports {{ $value }} under-replicated partitions."

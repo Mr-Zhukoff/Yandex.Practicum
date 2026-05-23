@@ -17,6 +17,8 @@ The current slice includes:
   - Kafka TLS/mTLS and ACL configuration,
   - replicated topics with `min.insync.replicas=2`,
   - PostgreSQL,
+  - HDFS-compatible local data lake directory (`data-lake/`),
+  - Prometheus, Grafana, Alertmanager and Kafka JMX metrics,
   - topic initialization.
 - Go services:
   - `services/shop-api` — reads `data/products.json` and writes product events to Kafka.
@@ -24,7 +26,9 @@ The current slice includes:
   - `services/product-filter` — Goka stream processor that consumes raw products and writes allowed/rejected/DLQ topics.
   - `services/postgres-sink` — consumes allowed products and upserts them to PostgreSQL.
   - `services/client-api` — terminal search/recommend commands.
-  - `services/hdfs-ingestor` — placeholder for the HDFS implementation stage.
+  - `services/hdfs-ingestor` — consumes mirrored analytics topics from the secondary Kafka cluster, writes JSONL datasets to `data-lake/`, calculates simple category recommendations and writes them to `analytics.recommendations`.
+
+The analytics implementation uses a local mounted JSONL data lake as the HDFS-compatible storage layer for the Docker Compose demo. The directory structure is partitioned by dataset and date and can be copied to real HDFS or read by Spark as JSON Lines.
 
 ## Start infrastructure
 
@@ -161,6 +165,33 @@ Start long-running application services:
 docker compose --profile app up -d --build
 ```
 
+Start analytics ingestion/recommendation worker explicitly:
+
+```bash
+docker compose --profile analytics up -d --build hdfs-ingestor
+```
+
+It reads from the secondary Kafka cluster:
+
+- `shop.products.allowed`
+- `client.search.requests`
+- `client.recommendation.requests`
+
+It writes JSONL datasets to:
+
+```text
+data-lake/products_allowed/YYYY-MM-DD.jsonl
+data-lake/search_requests/YYYY-MM-DD.jsonl
+data-lake/recommendation_requests/YYYY-MM-DD.jsonl
+data-lake/recommendations/YYYY-MM-DD.jsonl
+```
+
+and publishes calculated recommendations to:
+
+```text
+analytics.recommendations
+```
+
 Seed the forbidden list through a one-shot Compose job:
 
 ```bash
@@ -179,6 +210,28 @@ Run a sample client search through a one-shot Compose job:
 docker compose --profile jobs run --rm client-api
 ```
 
+## Monitoring
+
+Download the JMX Prometheus Java agent if it is missing:
+
+```bash
+./scripts/download-jmx-agent.sh
+```
+
+Start monitoring:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+Endpoints:
+
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (`admin` / `admin`)
+- Alertmanager: http://localhost:9093
+
+Grafana provisions the `Marketplace Kafka Overview` dashboard automatically. Prometheus scrapes Kafka JMX exporter endpoints and Kafka exporter metrics for both clusters. Alertmanager receives alerts for broker scrape failures and under-replicated partitions.
+
 ## Reset local environment
 
 ```bash
@@ -190,4 +243,16 @@ docker compose --profile jobs run --rm client-api
 ```bash
 go test ./...
 docker compose config
+```
+
+Check analytics output:
+
+```bash
+ls data-lake
+docker exec marketplace-kafka2-1 kafka-console-consumer.sh \
+  --bootstrap-server kafka2-1:29092,kafka2-2:29092,kafka2-3:29092 \
+  --consumer.config /opt/bitnami/kafka/config/certs/admin-ssl.properties \
+  --topic analytics.recommendations \
+  --from-beginning \
+  --timeout-ms 5000
 ```
