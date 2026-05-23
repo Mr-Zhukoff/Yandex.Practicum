@@ -22,7 +22,7 @@ services:
       KAFKA_CERTIFICATE_PASSWORD: "changeit"
       KAFKA_TLS_CLIENT_AUTH: "required"
       KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
-      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka1.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.keystore.jks"
       KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
       KAFKA_CFG_SSL_KEYSTORE_TYPE: "PKCS12"
       KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
@@ -41,7 +41,10 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
       - kafka1-data:/bitnami/kafka
-      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./configs/kafka/certs/kafka1.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
+      - ./configs/kafka/certs/admin-ssl.properties:/opt/bitnami/kafka/config/certs/admin-ssl.properties:ro
     networks:
       - app-net
     healthcheck:
@@ -71,7 +74,7 @@ services:
       KAFKA_CERTIFICATE_PASSWORD: "changeit"
       KAFKA_TLS_CLIENT_AUTH: "required"
       KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
-      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.keystore.jks"
       KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
       KAFKA_CFG_SSL_KEYSTORE_TYPE: "PKCS12"
       KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
@@ -90,7 +93,10 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
       - kafka2-data:/bitnami/kafka
-      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./configs/kafka/certs/kafka2.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
+      - ./configs/kafka/certs/admin-ssl.properties:/opt/bitnami/kafka/config/certs/admin-ssl.properties:ro
     networks:
       - app-net
     healthcheck:
@@ -120,7 +126,7 @@ services:
       KAFKA_CERTIFICATE_PASSWORD: "changeit"
       KAFKA_TLS_CLIENT_AUTH: "required"
       KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
-      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka3.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.keystore.jks"
       KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
       KAFKA_CFG_SSL_KEYSTORE_TYPE: "PKCS12"
       KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
@@ -139,7 +145,10 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
       - kafka3-data:/bitnami/kafka
-      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./configs/kafka/certs/kafka3.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
+      - ./configs/kafka/certs/admin-ssl.properties:/opt/bitnami/kafka/config/certs/admin-ssl.properties:ro
     networks:
       - app-net
     healthcheck:
@@ -169,7 +178,7 @@ services:
       KAFKA_CERTIFICATE_PASSWORD: "changeit"
       KAFKA_TLS_CLIENT_AUTH: "required"
       KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
-      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2-1.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.keystore.jks"
       KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
       KAFKA_CFG_SSL_KEYSTORE_TYPE: "PKCS12"
       KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
@@ -188,7 +197,10 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
       - kafka2-1-data:/bitnami/kafka
-      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./configs/kafka/certs/kafka2-1.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
+      - ./configs/kafka/certs/admin-ssl.properties:/opt/bitnami/kafka/config/certs/admin-ssl.properties:ro
     networks:
       - app-net
     healthcheck:
@@ -218,7 +230,7 @@ services:
       KAFKA_CERTIFICATE_PASSWORD: "changeit"
       KAFKA_TLS_CLIENT_AUTH: "required"
       KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
-      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2-2.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.keystore.jks"
       KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
       KAFKA_CFG_SSL_KEYSTORE_TYPE: "PKCS12"
       KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
@@ -237,7 +249,10 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
       - kafka2-2-data:/bitnami/kafka
-      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./configs/kafka/certs/kafka2-2.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
+      - ./configs/kafka/certs/admin-ssl.properties:/opt/bitnami/kafka/config/certs/admin-ssl.properties:ro
     networks:
       - app-net
     healthcheck:
@@ -267,7 +282,7 @@ services:
       KAFKA_CERTIFICATE_PASSWORD: "changeit"
       KAFKA_TLS_CLIENT_AUTH: "required"
       KAFKA_TLS_CONTROLLER_CLIENT_AUTH: "required"
-      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka2-3.keystore.jks"
+      KAFKA_CFG_SSL_KEYSTORE_LOCATION: "/opt/bitnami/kafka/config/certs/kafka.keystore.jks"
       KAFKA_CFG_SSL_KEYSTORE_PASSWORD: "changeit"
       KAFKA_CFG_SSL_KEYSTORE_TYPE: "PKCS12"
       KAFKA_CFG_SSL_KEY_PASSWORD: "changeit"
@@ -286,7 +301,10 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "2"
     volumes:
       - kafka2-3-data:/bitnami/kafka
-      - ./configs/kafka/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./configs/kafka/certs/kafka2-3.keystore.jks:/opt/bitnami/kafka/config/certs/kafka.keystore.jks:ro
+      - ./configs/kafka/certs/kafka.truststore.jks:/opt/bitnami/kafka/config/certs/kafka.truststore.jks:ro
+      - ./configs/kafka/certs/admin.keystore.jks:/opt/bitnami/kafka/config/certs/admin.keystore.jks:ro
+      - ./configs/kafka/certs/admin-ssl.properties:/opt/bitnami/kafka/config/certs/admin-ssl.properties:ro
     networks:
       - app-net
     healthcheck:

@@ -33,6 +33,166 @@
 
 ![](https://pictures.s3.yandex.net/resources/unnamed_5_1752748097.png)
 
+```mermaid
+flowchart LR
+    %% =========================
+    %% Источники данных
+    %% =========================
+
+    subgraph SRC1["Источник данных"]
+        SHOP_API["SHOP API"]
+        SHOP_PROD["Shop<br/>producer"]
+        SHOP_API --- SHOP_PROD
+    end
+
+    subgraph SRC2["Источник данных"]
+        CLIENT_API["CLIENT API"]
+        CUSTOMER_PROD["Customer<br/>producer"]
+        DB_CLIENT["Database<br/>client"]
+        KSQL_CLIENT["ksqlDB<br/>client"]
+
+        CLIENT_API --- CUSTOMER_PROD
+        CLIENT_API --- DB_CLIENT
+        CLIENT_API --- KSQL_CLIENT
+    end
+
+    BLOCK["Блокировка<br/>товаров"]
+    STREAM["Потоковая<br/>обработка<br/>данных"]
+
+    %% =========================
+    %% Kafka основной кластер
+    %% =========================
+
+    subgraph KAFKA1["Apache Kafka"]
+        K1_B1["Broker 1"]
+        K1_B2["Broker 2"]
+        K1_B3["Broker 3"]
+    end
+
+    %% =========================
+    %% Schema Registry
+    %% =========================
+
+    SR["Schema<br/>registry"]
+
+    %% =========================
+    %% Kafka зеркальный / второй кластер
+    %% =========================
+
+    subgraph KAFKA2["Apache Kafka"]
+        K2_B1["Broker 1"]
+        K2_B2["Broker 2"]
+        K2_B3["Broker 3"]
+    end
+
+    MIRROR["mirror"]
+
+    %% =========================
+    %% Monitoring
+    %% =========================
+
+    MON1["Prometheus,<br/>Grafana,<br/>Alertmanager"]
+    MON2["Prometheus,<br/>Grafana,<br/>Alertmanager"]
+
+    %% =========================
+    %% ETL
+    %% =========================
+
+    CONNECT["Kafka<br/>Connect"]
+    ETL["ETL"]
+
+    %% =========================
+    %% Аналитика
+    %% =========================
+
+    subgraph ANALYTICS["Аналитика"]
+        CONSUMER["Consumer"]
+        HDFS["Hdfs"]
+        SPARK["Spark"]
+        PRODUCER["Producer"]
+    end
+
+    %% =========================
+    %% Внешние хранилища
+    %% =========================
+
+    FILE["File"]
+    ES["Elasticsearch"]
+
+    %% =========================
+    %% Потоки данных
+    %% =========================
+
+    BLOCK --> K1_B1
+
+    SHOP_PROD --> K1_B2
+    CUSTOMER_PROD --> K1_B2
+
+    K1_B2 --> CONNECT
+    CONNECT --> ES
+    CONNECT --> FILE
+
+    K1_B2 --> MIRROR
+    MIRROR --> K2_B1
+
+    KSQL_CLIENT <--> KSQL_MV["Ksqldb<br/>materialized<br/>view"]
+    KSQL_MV --> K2_B1
+
+    K2_B2 --> CONSUMER
+    CONSUMER --> HDFS
+    HDFS <--> SPARK
+
+    CONSUMER --> PRODUCER
+    HDFS --> PRODUCER
+    PRODUCER --> K2_B3
+
+    PRODUCER --> FILE
+    CLIENT_API --> ES
+
+    KAFKA1 <--> MON1
+    KAFKA2 <--> MON2
+
+    %% =========================
+    %% Schema Registry связи
+    %% =========================
+
+    CUSTOMER_PROD -.-> SR
+    DB_CLIENT -.-> SR
+    KSQL_MV -.-> SR
+
+    SR -.-> CONSUMER
+    SR -.-> PRODUCER
+    SR -.-> FILE
+
+    %% =========================
+    %% Подписи
+    %% =========================
+
+    ETL --- CONNECT
+    STREAM --- BLOCK
+
+    %% =========================
+    %% Стили
+    %% =========================
+
+    classDef source fill:#f3f3f3,stroke:#f3f3f3,color:#222;
+    classDef green fill:#47bf70,stroke:#47bf70,color:#111;
+    classDef kafka fill:#aa98f5,stroke:#aa98f5,color:#111;
+    classDef monitor fill:#ff8738,stroke:#ff8738,color:#111;
+    classDef connect fill:#ef3b2d,stroke:#ef3b2d,color:#fff;
+    classDef analytic fill:#ffcc16,stroke:#ffcc16,color:#111;
+    classDef storage fill:#e6e6e6,stroke:#e6e6e6,color:#111;
+    classDef registry fill:#aa98f5,stroke:#aa98f5,color:#111;
+
+    class SHOP_PROD,CUSTOMER_PROD,DB_CLIENT,FILE green;
+    class K1_B1,K1_B2,K1_B3,K2_B1,K2_B2,K2_B3 kafka;
+    class MON1,MON2 monitor;
+    class CONNECT connect;
+    class CONSUMER,HDFS,SPARK,PRODUCER analytic;
+    class ES,KSQL_CLIENT,KSQL_MV storage;
+    class SR registry;
+```
+
 ## Задание. Разработать аналитическую платформу для маркетплейса
 
 ### Шаг 1. Создайте источники данных

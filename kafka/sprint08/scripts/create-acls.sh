@@ -24,6 +24,12 @@ add_group_acl() {
   acl --add --allow-principal "${principal}" --operation Read --group "${group}"
 }
 
+add_cluster_acl() {
+  local principal="$1"
+  local operation="$2"
+  acl --add --allow-principal "${principal}" --operation "${operation}" --cluster
+}
+
 SHOP="User:CN=shop-api"
 CLIENT="User:CN=client-api"
 FILTER="User:CN=product-filter"
@@ -64,10 +70,8 @@ add_topic_acl "User:CN=admin" Describe "forbidden.products.state"
 # creates/uses internal heartbeat/checkpoint/offset-sync topics and mirrors a
 # selected set of business topics. In production these permissions should be
 # narrowed to exact topic and group patterns.
-add_topic_acl "${MIRROR}" Create "*"
-add_topic_acl "${MIRROR}" Read "*"
-add_topic_acl "${MIRROR}" Write "*"
-add_topic_acl "${MIRROR}" Describe "*"
+add_topic_acl "${MIRROR}" All "*"
+add_cluster_acl "${MIRROR}" Create
 add_group_acl "${MIRROR}" "*"
 
 echo "ACLs created"

@@ -19,7 +19,7 @@ func ProcessorOptions(tlsOptions kafkautil.TLSOptions) ([]goka.ProcessorOption, 
 		return nil, err
 	}
 
-	config := sarama.NewConfig()
+	config := goka.DefaultConfig()
 	config.Net.TLS.Enable = true
 	config.Net.TLS.Config = tlsConfig.Clone()
 	config.Net.TLS.Config.MinVersion = tls.VersionTLS12
@@ -30,5 +30,6 @@ func ProcessorOptions(tlsOptions kafkautil.TLSOptions) ([]goka.ProcessorOption, 
 		goka.WithConsumerGroupBuilder(goka.ConsumerGroupBuilderWithConfig(config)),
 		goka.WithProducerBuilder(goka.ProducerBuilderWithConfig(config)),
 		goka.WithConsumerSaramaBuilder(goka.SaramaConsumerBuilderWithConfig(config)),
+		goka.WithTopicManagerBuilder(goka.TopicManagerBuilderWithConfig(config, goka.NewTopicManagerConfig())),
 	}, nil
 }
