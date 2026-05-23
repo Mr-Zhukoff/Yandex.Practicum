@@ -424,6 +424,7 @@ services:
       args:
         SERVICE_PATH: services/product-filter
     container_name: marketplace-product-filter
+    restart: unless-stopped
     profiles: ["app"]
     depends_on:
       kafka-acls:
@@ -441,6 +442,7 @@ services:
       args:
         SERVICE_PATH: services/postgres-sink
     container_name: marketplace-postgres-sink
+    restart: unless-stopped
     profiles: ["app"]
     depends_on:
       kafka-acls:
